@@ -1,0 +1,182 @@
+import '../../../CommonWidgets/core/company/session/company_session_manager.dart';
+
+/// Service that handles settings-related operations with the backend (Odoo).
+///
+/// Main responsibilities:
+/// - Fetching available languages (`res.lang`)
+/// - Fetching active currencies (`res.currency`)
+/// - Fetching timezone choices (from `res.users` tz field selection)
+/// - Updating user language and/or timezone preferences
+///
+/// All methods assume an active session via [CompanySessionManager].
+/// Methods return `null` or fallback values on failure instead of throwing
+/// (except `initializeClient`).
+class SettingService {
+  /// Ensures there's an active session before making API calls.
+  ///
+  /// Throws [Exception] if no session is found.
+  Future<void> initializeClient() async {
+    final session = await CompanySessionManager.getCurrentSession();
+    if (session == null) throw Exception("No active session");
+  }
+
+  /// Fetches all active languages from `res.lang`.
+  ///
+  /// Returns list of maps containing:
+  ///   - code (e.g. "en_US")
+  ///   - name (e.g. "English (US)")
+  ///   - iso_code
+  ///   - direction (ltr/rtl)
+  ///
+  /// Ordered by name.
+  ///
+  /// Returns `null` on error or empty result.
+  Future<List<dynamic>?> fetchLanguage() async {
+    try {
+      final languageDetails = await CompanySessionManager.callKwWithCompany({
+        'model': 'res.lang',
+        'method': 'search_read',
+        'args': [
+          [
+            ['active', '=', true],
+          ],
+        ],
+        'kwargs': {
+          'fields': ['code', 'name', 'iso_code', 'direction'],
+          'order': 'name',
+        },
+      });
+
+      return languageDetails?.isNotEmpty == true ? languageDetails : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Fetches all active currencies from `res.currency`.
+  ///
+  /// Returns list of maps containing:
+  ///   - name (short name, e.g. "USD")
+  ///   - full_name (e.g. "United States dollar")
+  ///   - symbol (e.g. "$")
+  ///   - position ("before"/"after")
+  ///   - rounding
+  ///
+  /// Ordered by name.
+  ///
+  /// Returns `null` on error or empty result.
+  Future<List<dynamic>?> fetchCurrency() async {
+    try {
+      final languageDetails = await CompanySessionManager.callKwWithCompany({
+        'model': 'res.currency',
+        'method': 'search_read',
+        'args': [
+          [
+            ['active', '=', true],
+          ],
+          ['name', 'full_name', 'symbol', 'position', 'rounding'],
+        ],
+        'kwargs': {'order': 'name'},
+      });
+
+      return languageDetails?.isNotEmpty == true ? languageDetails : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  List<Map<String, dynamic>> _availableTimezones = [];
+
+  /// Fetches the list of available timezones from the `tz` selection field
+  /// on the `res.users` model.
+  ///
+  /// Returns list of maps like:
+  ///   [{'code': 'Europe/Paris', 'name': 'Europe/Paris'}, ...]
+  ///
+  /// Falls back to a hardcoded list if:
+  ///   - the field_get call fails
+  ///   - the selection is empty/malformed
+  Future<List<Map<String, dynamic>>> fetchTimezones() async {
+    try {
+      final result = await CompanySessionManager.callKwWithCompany({
+        'model': 'res.users',
+        'method': 'fields_get',
+        'args': [
+          ['tz'],
+        ],
+        'kwargs': {
+          'attributes': ['selection', 'string'],
+        },
+      });
+
+      final tzField = (result != null)
+          ? result['tz'] as Map<String, dynamic>?
+          : null;
+      final selection = tzField != null
+          ? tzField['selection'] as List<dynamic>?
+          : null;
+
+      List<Map<String, dynamic>> timezones = [];
+
+      if (selection != null && selection.isNotEmpty) {
+        timezones = selection.map<Map<String, dynamic>>((item) {
+          if (item is List && item.length >= 2) {
+            return {'code': item[0].toString(), 'name': item[1].toString()};
+          }
+          return {'code': item.toString(), 'name': item.toString()};
+        }).toList();
+      }
+
+      // Fallback minimal list if backend returns nothing useful
+      if (timezones.isEmpty) {
+        timezones = [
+          {'code': 'UTC', 'name': 'UTC'},
+          {'code': 'Europe/Brussels', 'name': 'Europe/Brussels'},
+          {'code': 'Asia/Kolkata', 'name': 'Asia/Kolkata'},
+          {'code': 'America/New_York', 'name': 'America/New_York'},
+        ];
+      }
+
+      _availableTimezones = timezones;
+
+      return timezones;
+    } catch (e) {
+      _availableTimezones = [
+        {'code': 'UTC', 'name': 'UTC'},
+        {'code': 'America/New_York', 'name': 'Eastern Time (US & Canada)'},
+        {'code': 'America/Chicago', 'name': 'Central Time (US & Canada)'},
+        {'code': 'America/Denver', 'name': 'Mountain Time (US & Canada)'},
+        {'code': 'America/Los_Angeles', 'name': 'Pacific Time (US & Canada)'},
+        {'code': 'Europe/London', 'name': 'London'},
+        {'code': 'Europe/Paris', 'name': 'Paris'},
+        {'code': 'Europe/Berlin', 'name': 'Berlin'},
+        {'code': 'Asia/Tokyo', 'name': 'Tokyo'},
+        {'code': 'Asia/Shanghai', 'name': 'Shanghai'},
+        {'code': 'Asia/Kolkata', 'name': 'Mumbai, Kolkata, New Delhi'},
+        {'code': 'Asia/Dubai', 'name': 'Dubai'},
+        {'code': 'Australia/Sydney', 'name': 'Sydney'},
+      ];
+      return _availableTimezones;
+    } finally {}
+  }
+
+  /// Updates the current user's language and/or timezone.
+  ///
+  /// [id] should be the current user's ID (res.users).
+  /// [updatedValue] example:
+  ///   {'lang': 'fr_FR', 'tz': 'Europe/Paris'}
+  ///
+  /// Silently ignores errors (fire-and-forget style).
+  Future<void> updateLanguage(int id, updatedValue) async {
+    try {
+      await CompanySessionManager.callKwWithCompany({
+        'model': 'res.users',
+        'method': 'write',
+        'args': [id, updatedValue],
+        'kwargs': {},
+      });
+    } catch (e) {
+      return;
+    }
+  }
+}
