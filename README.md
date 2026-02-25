@@ -77,7 +77,7 @@ Mobo Attendance is built using modern technologies to ensure reliability and per
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/mobo-suite/mobo_attendance.git
+   git clone https://github.com/mobo-open-source/mobo_attendance.git
    cd mobo_attendance
    ```
 
