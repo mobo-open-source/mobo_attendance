@@ -77,7 +77,7 @@ Mobo Attendance is built using modern technologies to ensure reliability and per
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/mobo-suite/mobo_attendance.git
+   git clone https://github.com/mobo-open-source/mobo_attendance.git
    cd mobo_attendance
    ```
 
@@ -103,5 +103,5 @@ See the [LICENSE](LICENSE) file for the main license and [THIRD_PARTY_LICENSES.m
 
 ##  Maintainers
 **Team Mobo at Cybrosys Technologies**
-- Email: [cybroplay@gmail.com](mailto:cybroplay@gmail.com)
+- Email: [mobo@cybrosys.com](mailto:mobo@cybrosys.com)
 - Website: [cybrosys.com](https://www.cybrosys.com)
