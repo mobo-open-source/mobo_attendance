@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../../Rating/review_service.dart';
 import '../services/employee_form_service.dart';
 
 part 'employee_form_event.dart';
@@ -52,7 +53,6 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
     on<AddSkill>(_onAddSkill);
     on<UpdateSkill>(_onUpdateSkill);
     on<DeleteSkill>(_onDeleteSkill);
-
     // Generic change detector (marks form as dirty)
     on<FormFieldChanged>((event, emit) {
       emit(state.copyWith());
@@ -111,6 +111,7 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
 
     emit(state.copyWith(
       isLoading: true,
+
       clearMessage: true,
 
       name: '',
@@ -160,6 +161,7 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
       emit(
         state.copyWith(
           isLoading: false,
+
           hasEditPermission: hasPermission,
           employeeDetails: details,
 
@@ -194,6 +196,7 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
       emit(
         state.copyWith(
           isLoading: false,
+
           errorMessage: "Something went wrong, Please try again later.",
           jobList: preservedJobList,
           departmentList: preservedDepartmentList,
@@ -378,6 +381,7 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
             successMessage: "Employee details updated successfully",
           ),
         );
+
       } else {
         emit(
           state.copyWith(

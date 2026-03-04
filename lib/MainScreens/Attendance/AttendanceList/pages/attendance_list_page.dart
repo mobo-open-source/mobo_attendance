@@ -14,6 +14,7 @@ import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../../CommonWidgets/globals.dart';
 import '../../../../CommonWidgets/shared/widgets/snackbar.dart';
+import '../../../../Rating/review_service.dart';
 import '../../../AppBars/infrastructure/profile_refresh_bus.dart';
 import '../../AttendanceCreate/pages/create_attendance_page.dart';
 import '../../AttendanceForm/pages/attendance_form_page.dart';
@@ -196,6 +197,10 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
               context,
               'Attendance deleted successfully',
             );
+            ReviewService().trackSignificantEvent();
+            Future.delayed(const Duration(seconds: 3), () {
+              ReviewService().checkAndShowRating(context);
+            });
           }
         },
         builder: (context, state) {

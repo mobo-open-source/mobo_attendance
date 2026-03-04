@@ -211,13 +211,15 @@ class CreateAttendanceBloc
     final alreadyCheckedIn = await _service.isEmployeeAlreadyCheckedIn(
       current.selectedEmployeeId!,
     );
+
     if (alreadyCheckedIn) {
       emit(
-        CreateAttendanceError(
-          "Cannot create new attendance_onSaveAttendance for ${current.selectedEmployeeName}. Employee hasn't checked out yet.",
+        current.copyWith(
+          errorMessage:
+              "Cannot create new attendance for ${current.selectedEmployeeName}. Employee hasn't checked out yet.",
         ),
       );
-      emit(current);
+
       return;
     }
 

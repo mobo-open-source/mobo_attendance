@@ -20,6 +20,7 @@ import '../../../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../../../CommonWidgets/globals.dart';
 import '../../../../../CommonWidgets/shared/widgets/snackbar.dart';
+import '../../../../../Rating/review_service.dart';
 import '../../../../AppBars/infrastructure/profile_refresh_bus.dart';
 import '../../../../AppBars/pages/common_app_bar.dart';
 import '../../SmartTabs/PrivateInfo/pages/private_info_page.dart';
@@ -514,6 +515,7 @@ class _EmployeeFormPageState extends State<EmployeeFormPage> {
             ),
             body: BlocConsumer<EmployeeFormBloc, EmployeeFormState>(
               listener: (context, state) {
+
                 if (state.errorMessage != null) {
                   CustomSnackbar.showError(context, state.errorMessage!);
                   context.read<EmployeeFormBloc>().emit(
@@ -532,6 +534,11 @@ class _EmployeeFormPageState extends State<EmployeeFormPage> {
                   context.read<EmployeeFormBloc>().emit(
                     state.copyWith(clearMessage: true),
                   );
+                  ReviewService().trackSignificantEvent();
+                  Future.delayed(const Duration(seconds: 3), () {
+                    print("ddddddddddddddd");
+                    ReviewService().checkAndShowRating(context);
+                  });
                 }
               },
 

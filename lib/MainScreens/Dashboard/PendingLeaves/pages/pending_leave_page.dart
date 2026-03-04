@@ -8,6 +8,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../../CommonWidgets/globals.dart';
+import '../../../../Rating/review_service.dart';
 import '../bloc/pending_leave_bloc.dart';
 
 /// Entry point widget for the Pending Leaves approval screen (HR/Manager view).
@@ -619,7 +620,13 @@ class _PendingLeaveViewState extends State<PendingLeaveView> {
           ),
         ),
       ),
-      body: BlocBuilder<PendingLeaveBloc, PendingLeaveState>(
+      body: BlocConsumer<PendingLeaveBloc, PendingLeaveState>(
+        listener: (context, state) {
+          if (state is ShowRatingDialog) {
+            ReviewService().trackSignificantEvent();
+            ReviewService().checkAndShowRating(context);
+          }
+        },
         builder: (context, state) {
           return Stack(
             children: [

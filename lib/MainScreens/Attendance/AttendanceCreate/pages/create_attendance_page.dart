@@ -10,6 +10,7 @@ import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../../CommonWidgets/globals.dart';
 import '../../../../CommonWidgets/shared/widgets/snackbar.dart';
+import '../../../../Rating/review_service.dart';
 import '../../../Employees/EmployeeForm/Form/widgets/shimmer_employee_details.dart';
 import '../../AttendanceForm/pages/attendance_form_page.dart';
 import '../bloc/create_attendance_bloc.dart';
@@ -324,6 +325,10 @@ class CreateAttendanceView extends StatelessWidget {
         listener: (context, state) {
           if (state is CreateAttendanceSuccess) {
             CustomSnackbar.showSuccess(context, state.message);
+            ReviewService().trackSignificantEvent();
+            Future.delayed(const Duration(seconds: 3), () {
+              ReviewService().checkAndShowRating(context);
+            });
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -335,6 +340,8 @@ class CreateAttendanceView extends StatelessWidget {
             );
           } else if (state is CreateAttendanceLoaded && state.errorMessage != null) {
             CustomSnackbar.showError(context, state.errorMessage!);
+          } else if (state is CreateAttendanceError) {
+            CustomSnackbar.showError(context, state.message);
           }
         },
         builder: (context, state) {

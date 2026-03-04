@@ -2,6 +2,8 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobo_attendance/MainScreens/Dashboard/PendingLeaves/services/pending_leave_service.dart';
 
+import '../../../../Rating/review_service.dart';
+
 part 'pending_leave_event.dart';
 
 part 'pending_leave_state.dart';
@@ -262,6 +264,7 @@ class PendingLeaveBloc extends Bloc<PendingLeaveEvent, PendingLeaveState> {
         errorMessage: errorMessage,
       ),
     );
+    emit(ShowRatingDialog());
 
     if (errorMessage == null) {
       add(const FetchPendingLeaves(page: 0));
@@ -288,6 +291,7 @@ class PendingLeaveBloc extends Bloc<PendingLeaveEvent, PendingLeaveState> {
         errorMessage: errorMessage,
       ),
     );
+    emit(ShowRatingDialog());
 
     if (errorMessage == null) {
       add(const FetchPendingLeaves(page: 0));
@@ -314,6 +318,7 @@ class PendingLeaveBloc extends Bloc<PendingLeaveEvent, PendingLeaveState> {
         errorMessage: errorMessage,
       ),
     );
+    emit(ShowRatingDialog());
 
     if (errorMessage == null) {
       add(const FetchPendingLeaves(page: 0));

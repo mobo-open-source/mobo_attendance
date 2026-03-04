@@ -8,6 +8,7 @@ import '../../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../../CommonWidgets/globals.dart';
 import '../../../../CommonWidgets/shared/widgets/snackbar.dart';
+import '../../../../Rating/review_service.dart';
 import '../../../AppBars/pages/common_app_bar.dart';
 import '../bloc/request_absence_bloc.dart';
 import '../bloc/request_absence_event.dart';
@@ -119,6 +120,9 @@ class _RequestAbsenceViewState extends State<RequestAbsenceView> {
           // Handle success: show snackbar + navigate back to dashboard
           if (state.success) {
             CustomSnackbar.showSuccess(context, "Leave created successfully");
+            Future.delayed(const Duration(seconds: 3), () {
+              ReviewService().checkAndShowRating(context);
+            });
             Navigator.pushReplacement(
               context,
               PageRouteBuilder(

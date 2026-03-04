@@ -8,6 +8,7 @@ import '../../../../../CommonWidgets/globals.dart';
 import '../../../../../CommonWidgets/shared/widgets/snackbar.dart';
 import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
+import '../../../../Rating/review_service.dart';
 import '../../EmployeeForm/Form/pages/employee_form_page.dart';
 import '../../EmployeeForm/Form/widgets/shimmer_employee_details.dart';
 import '../bloc/employee_create_bloc.dart';
@@ -143,6 +144,9 @@ class _CreateEmployeeViewState extends State<CreateEmployeeView> {
               "Employee created successfully",
             );
             _bloc?.add( ResetForm());
+            Future.delayed(const Duration(seconds: 3), () {
+              ReviewService().checkAndShowRating(context);
+            });
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(

@@ -20,6 +20,7 @@ import '../../../LoginPages/login/models/session_model.dart';
 import '../../../Profile/configuration/pages/configuration.dart';
 import '../../../Profile/profile/models/profile.dart';
 import '../../../Profile/profile/services/profile_service.dart';
+import '../../../Rating/review_service.dart';
 import '../../Attendance/AttendanceList/pages/attendance_list_page.dart';
 import '../../Calendar/pages/calendar_page.dart';
 import '../../Dashboard/AttendanceDashboard/pages/attendance_dashboard_page.dart';
@@ -71,6 +72,11 @@ class _CommonAppBarState extends State<CommonAppBar> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await loadProfile();
       await context.read<CompanyProvider>().initialize();
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          ReviewService().checkAndShowRating(context);
+        }
+      });
     });
 
     _profileSub = ProfileRefreshBus.onProfileRefresh.listen((_) {
