@@ -19,7 +19,6 @@ import '../../../../CommonWidgets/core/company/providers/company_provider.dart';
 import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../../CommonWidgets/core/providers/motion_provider.dart';
-import '../../../../Rating/review_service.dart';
 import '../../../AppBars/pages/common_app_bar.dart';
 import '../../../Employees/EmployeeList/bloc/employee_list_bloc.dart';
 import '../../../Employees/EmployeeList/pages/employee_list_page.dart';

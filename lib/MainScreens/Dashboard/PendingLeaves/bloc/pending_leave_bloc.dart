@@ -2,8 +2,6 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobo_attendance/MainScreens/Dashboard/PendingLeaves/services/pending_leave_service.dart';
 
-import '../../../../Rating/review_service.dart';
-
 part 'pending_leave_event.dart';
 
 part 'pending_leave_state.dart';

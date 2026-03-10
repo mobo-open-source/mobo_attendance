@@ -132,7 +132,7 @@ class AttendanceDashboardState extends Equatable {
       isTimerLoading: isTimerLoading ?? this.isTimerLoading,
       isCheckIn: isCheckIn ?? this.isCheckIn,
       userName: userName ?? this.userName,
-      profileImageBytes: profileImageBytes ?? this.profileImageBytes,
+      profileImageBytes: profileImageBytes,
       checkInTime: checkInTime ?? this.checkInTime,
       lastCheckOutTime: lastCheckOutTime ?? this.lastCheckOutTime,
       workedHoursText: workedHoursText ?? this.workedHoursText,

@@ -536,7 +536,6 @@ class _EmployeeFormPageState extends State<EmployeeFormPage> {
                   );
                   ReviewService().trackSignificantEvent();
                   Future.delayed(const Duration(seconds: 3), () {
-                    print("ddddddddddddddd");
                     ReviewService().checkAndShowRating(context);
                   });
                 }

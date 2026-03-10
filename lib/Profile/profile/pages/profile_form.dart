@@ -450,7 +450,7 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
                                 children: [
                                   CircleAvatar(
                                     radius: 50,
-                                    backgroundColor: Colors.transparent,
+                                    backgroundColor: AppStyle.primaryColor,
                                     child: ClipOval(
                                       child: SizedBox(
                                         width: 100,
@@ -470,16 +470,21 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
                                                       profileImageBytes!,
                                                       fit: BoxFit.cover,
                                                       errorBuilder:
-                                                          (_, __, ___) =>
-                                                              const Icon(
-                                                                Icons.person,
-                                                                size: 50,
-                                                              ),
+                                                          (
+                                                            _,
+                                                            __,
+                                                            ___,
+                                                          ) => const Icon(
+                                                            HugeIcons
+                                                                .strokeRoundedUser,
+                                                            size: 50,
+                                                            color: Colors.white,
+                                                          ),
                                                     )
                                             : const Icon(
-                                                Icons.person,
+                                                HugeIcons.strokeRoundedUser,
                                                 size: 50,
-                                                color: Colors.pink,
+                                                color: Colors.white,
                                               ),
                                       ),
                                     ),
