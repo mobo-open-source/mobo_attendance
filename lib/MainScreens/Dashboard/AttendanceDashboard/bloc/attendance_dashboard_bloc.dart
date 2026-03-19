@@ -48,6 +48,13 @@ class AttendanceDashboardBloc
     });
   }
 
+  Uint8List? decodeOdooImage(dynamic value) {
+    if (value is String && value.isNotEmpty) {
+      return base64Decode(value);
+    }
+    return null;
+  }
+
   /// Loads all dashboard data including:
   ///   - User profile & image
   ///   - Check-in status & today's attendance record
@@ -60,7 +67,13 @@ class AttendanceDashboardBloc
     Emitter<AttendanceDashboardState> emit,
   ) async {
     emit(
-      state.copyWith(isLoading: true, errorMessage: null, catchError: false, connectionError: false),
+      state.copyWith(
+        isLoading: true,
+        errorMessage: null,
+        catchError: false,
+        connectionError: false,
+        profileImageBytes: null,
+      ),
     );
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -71,9 +84,9 @@ class AttendanceDashboardBloc
       bool isAppNotInstalled = false;
       bool accessForLeaveManager = false;
       bool success = await AppInstallCheck().checkLeaveModule();
-      if(!success){
+      if (!success) {
         isAppNotInstalled = true;
-      }else {
+      } else {
         isAppNotInstalled = false;
         accessForLeaveManager = await _service.isHrLeaveManager();
       }
@@ -81,12 +94,11 @@ class AttendanceDashboardBloc
       final isCheckedIn = await _service.isEmployeeAlreadyCheckedIn();
       final monthlyHours = await _service.getCurrentMonthWorkedHours();
       Uint8List? profileImageBytes;
-      if (profileList.isNotEmpty && profileList[0]['image_1920'] != null) {
-        final base64Image = profileList[0]['image_1920'];
-        if (base64Image.isNotEmpty) {
-          profileImageBytes = base64Decode(base64Image);
-        }
+
+      if (profileList.isNotEmpty) {
+        profileImageBytes = decodeOdooImage(profileList[0]['image_1920']);
       }
+
       int? staffCount,
           staffPresentCount,
           staffAbsentCount,
@@ -108,15 +120,15 @@ class AttendanceDashboardBloc
 
       // Leave Manager permissions
       if (!accessForAdmin && accessForLeaveManager) {
-        try{
+        try {
           leavePendingCount = await _service.pendingLeaveCount();
           pendingLeaves = await _service.pendingLeaves();
           isAppNotInstalled = false;
-        }catch(e){
+        } catch (e) {
           bool success = await AppInstallCheck().checkLeaveModule();
-          if(!success){
+          if (!success) {
             isAppNotInstalled = true;
-          }else {
+          } else {
             leavePendingCount = 0;
             pendingLeaves = [];
             isAppNotInstalled = false;
@@ -134,20 +146,21 @@ class AttendanceDashboardBloc
         staffPresentCount = presentEmployee['count'];
         staffPresentIds = List<int>.from(presentEmployee['employeeIds'] ?? []);
 
-        final absentEmployee = await _service.getAbsentEmployees(staffPresentIds);
+        final absentEmployee = await _service.getAbsentEmployees(
+          staffPresentIds,
+        );
         staffAbsentCount = absentEmployee['count'];
         staffAbsentIds = List<int>.from(absentEmployee['employeeIds'] ?? []);
-        try{
-        leavePendingCount = await _service.pendingLeaveCount();
-        pendingLeaves = await _service.pendingLeaves();
-        isAppNotInstalled = false;
-        }catch(e){
-
+        try {
+          leavePendingCount = await _service.pendingLeaveCount();
+          pendingLeaves = await _service.pendingLeaves();
+          isAppNotInstalled = false;
+        } catch (e) {
           bool success = await AppInstallCheck().checkLeaveModule();
 
-          if(!success){
+          if (!success) {
             isAppNotInstalled = true;
-          }else {
+          } else {
             leavePendingCount = 0;
             pendingLeaves = [];
             isAppNotInstalled = false;
@@ -230,7 +243,7 @@ class AttendanceDashboardBloc
           staffLateInCount: staffLateInCount,
           staffEarlyInCount: staffEarlyInCount,
           pendingLeaves: pendingLeaves,
-          isAppNotInstalled:isAppNotInstalled,
+          isAppNotInstalled: isAppNotInstalled,
           staffPresentIds: staffPresentIds,
           staffAbsentIds: staffAbsentIds,
           onTimeIds: onTimeIds,
@@ -241,19 +254,17 @@ class AttendanceDashboardBloc
         ),
       );
     } on SocketException catch (_) {
-      emit(state.copyWith(
-        isLoading: false,
-        leaveAction: false,
-        catchError: false,
-        connectionError: true,
-      ));
-    } catch (e) {
       emit(
         state.copyWith(
           isLoading: false,
           leaveAction: false,
-          catchError: true,
+          catchError: false,
+          connectionError: true,
         ),
+      );
+    } catch (e) {
+      emit(
+        state.copyWith(isLoading: false, leaveAction: false, catchError: true),
       );
     }
   }

@@ -21,7 +21,7 @@ void main() {
           () => mockPendingLeaveService.approveLeave(any()),
         ).thenAnswer((_) async => null);
         when(
-              () => mockPendingLeaveService.pendingLeaveCount(
+          () => mockPendingLeaveService.pendingLeaveCount(
             searchQuery: any(named: 'searchQuery'),
             firstApproval: any(named: 'firstApproval'),
             secondApproval: any(named: 'secondApproval'),
@@ -54,42 +54,65 @@ void main() {
       },
       act: (bloc) => bloc.add(ApproveLeave(1)),
       expect: () => [
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading true', true),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading true',
+          true,
+        ),
 
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading false', false),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading false',
+          false,
+        ),
 
-        isA<PendingLeaveState>()
-            .having((s) => s.leaves.length, 'leaves loaded', 1),
+        isA<ShowRatingDialog>(),
+        isA<PendingLeaveState>(),
+
+        isA<PendingLeaveState>().having(
+          (s) => s.leaves.length,
+          'leaves loaded',
+          1,
+        ),
       ],
       verify: (_) {
         verify(() => mockPendingLeaveService.approveLeave(any())).called(1);
-        verify(() => mockPendingLeaveService.loadPendingLeaves(
-          any(),
-          any(),
-          searchQuery: any(named: 'searchQuery'),
-          firstApproval: any(named: 'firstApproval'),
-          secondApproval: any(named: 'secondApproval'),
-        )).called(1);
+        verify(
+          () => mockPendingLeaveService.loadPendingLeaves(
+            any(),
+            any(),
+            searchQuery: any(named: 'searchQuery'),
+            firstApproval: any(named: 'firstApproval'),
+            secondApproval: any(named: 'secondApproval'),
+          ),
+        ).called(1);
       },
     );
 
     blocTest(
       'sets leaveLoading to true, then false, and does not refresh leaves when approveLeave fails',
       build: () {
-        when(
-          () => mockPendingLeaveService.approveLeave(any()),
-        ).thenAnswer((_) async => 'Unexpected error occurred while approving leave');
+        when(() => mockPendingLeaveService.approveLeave(any())).thenAnswer(
+          (_) async => 'Unexpected error occurred while approving leave',
+        );
         return PendingLeaveBloc(service: mockPendingLeaveService);
       },
       act: (bloc) => bloc.add(ApproveLeave(1)),
       expect: () => [
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading true', true),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading true',
+          true,
+        ),
 
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading false', false),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading false',
+          false,
+        ),
+
+        isA<ShowRatingDialog>(),
+
       ],
       verify: (_) {
         verify(() => mockPendingLeaveService.approveLeave(any())).called(1);
@@ -105,7 +128,7 @@ void main() {
           () => mockPendingLeaveService.validateLeave(any()),
         ).thenAnswer((_) async => null);
         when(
-              () => mockPendingLeaveService.pendingLeaveCount(
+          () => mockPendingLeaveService.pendingLeaveCount(
             searchQuery: any(named: 'searchQuery'),
             firstApproval: any(named: 'firstApproval'),
             secondApproval: any(named: 'secondApproval'),
@@ -138,42 +161,64 @@ void main() {
       },
       act: (bloc) => bloc.add(ValidateLeave(1)),
       expect: () => [
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading true', true),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading true',
+          true,
+        ),
 
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading false', false),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading false',
+          false,
+        ),
+        isA<ShowRatingDialog>(),
+        isA<PendingLeaveState>(),
 
-        isA<PendingLeaveState>()
-            .having((s) => s.leaves.length, 'leaves loaded', 1),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaves.length,
+          'leaves loaded',
+          1,
+        ),
       ],
       verify: (_) {
         verify(() => mockPendingLeaveService.validateLeave(any())).called(1);
-        verify(() => mockPendingLeaveService.loadPendingLeaves(
-          any(),
-          any(),
-          searchQuery: any(named: 'searchQuery'),
-          firstApproval: any(named: 'firstApproval'),
-          secondApproval: any(named: 'secondApproval'),
-        )).called(1);
+        verify(
+          () => mockPendingLeaveService.loadPendingLeaves(
+            any(),
+            any(),
+            searchQuery: any(named: 'searchQuery'),
+            firstApproval: any(named: 'firstApproval'),
+            secondApproval: any(named: 'secondApproval'),
+          ),
+        ).called(1);
       },
     );
 
     blocTest(
       'sets leaveLoading true, then false, and does not refresh leaves when validateLeave fails',
       build: () {
-        when(
-          () => mockPendingLeaveService.validateLeave(any()),
-        ).thenAnswer((_) async => 'Unexpected error occurred while validating leave');
+        when(() => mockPendingLeaveService.validateLeave(any())).thenAnswer(
+          (_) async => 'Unexpected error occurred while validating leave',
+        );
         return PendingLeaveBloc(service: mockPendingLeaveService);
       },
       act: (bloc) => bloc.add(ValidateLeave(1)),
       expect: () => [
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading true', true),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading true',
+          true,
+        ),
 
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading false', false),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading false',
+          false,
+        ),
+
+        isA<ShowRatingDialog>(),
+
       ],
       verify: (_) {
         verify(() => mockPendingLeaveService.validateLeave(any())).called(1);
@@ -189,7 +234,7 @@ void main() {
           () => mockPendingLeaveService.rejectLeave(any()),
         ).thenAnswer((_) async => null);
         when(
-              () => mockPendingLeaveService.pendingLeaveCount(
+          () => mockPendingLeaveService.pendingLeaveCount(
             searchQuery: any(named: 'searchQuery'),
             firstApproval: any(named: 'firstApproval'),
             secondApproval: any(named: 'secondApproval'),
@@ -222,42 +267,65 @@ void main() {
       },
       act: (bloc) => bloc.add(RejectLeave(1)),
       expect: () => [
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading true', true),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading true',
+          true,
+        ),
 
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading false', false),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading false',
+          false,
+        ),
 
-        isA<PendingLeaveState>()
-            .having((s) => s.leaves.length, 'leaves loaded', 1),
+        isA<ShowRatingDialog>(),
+        isA<PendingLeaveState>(),
+
+        isA<PendingLeaveState>().having(
+          (s) => s.leaves.length,
+          'leaves loaded',
+          1,
+        ),
       ],
       verify: (_) {
         verify(() => mockPendingLeaveService.rejectLeave(any())).called(1);
-        verify(() => mockPendingLeaveService.loadPendingLeaves(
-          any(),
-          any(),
-          searchQuery: any(named: 'searchQuery'),
-          firstApproval: any(named: 'firstApproval'),
-          secondApproval: any(named: 'secondApproval'),
-        )).called(1);
+        verify(
+          () => mockPendingLeaveService.loadPendingLeaves(
+            any(),
+            any(),
+            searchQuery: any(named: 'searchQuery'),
+            firstApproval: any(named: 'firstApproval'),
+            secondApproval: any(named: 'secondApproval'),
+          ),
+        ).called(1);
       },
     );
 
     blocTest(
       'sets leaveLoading true, then false, and does not refresh leaves when rejectLeave fails',
       build: () {
-        when(
-          () => mockPendingLeaveService.rejectLeave(any()),
-        ).thenAnswer((_) async => 'Unexpected error occurred while rejecting leave');
+        when(() => mockPendingLeaveService.rejectLeave(any())).thenAnswer(
+          (_) async => 'Unexpected error occurred while rejecting leave',
+        );
         return PendingLeaveBloc(service: mockPendingLeaveService);
       },
       act: (bloc) => bloc.add(RejectLeave(1)),
       expect: () => [
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading true', true),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading true',
+          true,
+        ),
 
-        isA<PendingLeaveState>()
-            .having((s) => s.leaveLoading[1], 'loading false', false),
+        isA<PendingLeaveState>().having(
+          (s) => s.leaveLoading[1],
+          'loading false',
+          false,
+        ),
+
+        isA<ShowRatingDialog>(),
+
       ],
       verify: (_) {
         verify(() => mockPendingLeaveService.rejectLeave(any())).called(1);

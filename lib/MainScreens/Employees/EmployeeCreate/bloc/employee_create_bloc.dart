@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../Rating/review_service.dart';
 import '../services/employee_create_service.dart';
 import 'employee_create_event.dart';
 import 'employee_create_state.dart';
@@ -784,6 +785,8 @@ class EmployeeCreateBloc
             employeeId: response['employee_id'],
           ),
         );
+        ReviewService().trackSignificantEvent();
+
       } else {
         String errorMsg = "Failed to create employee";
 

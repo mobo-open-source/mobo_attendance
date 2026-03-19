@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../Rating/review_service.dart';
 import '../services/request_absence_service.dart';
 import 'request_absence_event.dart';
 import 'request_absence_state.dart';
@@ -313,7 +314,7 @@ class RequestAbsenceBloc
         dateFrom: todayStr,
         dateTo: todayStr,
       ));
-
+      ReviewService().trackSignificantEvent();
     } else {
       emit(
         state.copyWith(

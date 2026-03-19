@@ -14,6 +14,7 @@ import '../../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../../CommonWidgets/globals.dart';
 import '../../../../CommonWidgets/shared/widgets/snackbar.dart';
+import '../../../../Rating/review_service.dart';
 import '../../../AppBars/pages/common_app_bar.dart';
 import '../../../Employees/EmployeeForm/Form/widgets/shimmer_employee_details.dart';
 import '../../AttendanceList/bloc/attendance_list_bloc.dart';
@@ -269,6 +270,10 @@ class _AttendanceFormPageState extends State<AttendanceFormPage> {
             } else if (state is AttendanceFormLoaded &&
                 state.successMessage != null) {
               CustomSnackbar.showSuccess(context, state.successMessage!);
+              ReviewService().trackSignificantEvent();
+              Future.delayed(const Duration(seconds: 3), () {
+                ReviewService().checkAndShowRating(context);
+              });
             }
           },
           builder: (context, state) {

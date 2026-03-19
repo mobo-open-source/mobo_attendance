@@ -20,6 +20,7 @@ import '../../../LoginPages/login/models/session_model.dart';
 import '../../../Profile/configuration/pages/configuration.dart';
 import '../../../Profile/profile/models/profile.dart';
 import '../../../Profile/profile/services/profile_service.dart';
+import '../../../Rating/review_service.dart';
 import '../../Attendance/AttendanceList/pages/attendance_list_page.dart';
 import '../../Calendar/pages/calendar_page.dart';
 import '../../Dashboard/AttendanceDashboard/pages/attendance_dashboard_page.dart';
@@ -70,7 +71,16 @@ class _CommonAppBarState extends State<CommonAppBar> {
     storageService = StorageService();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await loadProfile();
+      if (!mounted) return;
+
       await context.read<CompanyProvider>().initialize();
+
+      if (!mounted) return;
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          ReviewService().checkAndShowRating(context);
+        }
+      });
     });
 
     _profileSub = ProfileRefreshBus.onProfileRefresh.listen((_) {
@@ -84,7 +94,6 @@ class _CommonAppBarState extends State<CommonAppBar> {
       if (!mounted) return;
       AppBootstrapper.reloadAppBlocs(context);
     });
-
 
     _currentIndex = widget.initialIndex;
   }
@@ -164,7 +173,10 @@ class _CommonAppBarState extends State<CommonAppBar> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final motionProvider = Provider.of<MotionProvider>(context, listen: false);
-    final translationService = Provider.of<LanguageProvider>(context, listen: false);
+    final translationService = Provider.of<LanguageProvider>(
+      context,
+      listen: false,
+    );
 
     return WillPopScope(
       onWillPop: () async {
@@ -182,10 +194,10 @@ class _CommonAppBarState extends State<CommonAppBar> {
         appBar: AppBar(
           title: tr(
             pages[_currentIndex]['title'],
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black,
-              )
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.black,
+            ),
           ),
           backgroundColor: isDark ? Colors.grey[900] : Colors.grey[50],
           automaticallyImplyLeading: false,
@@ -202,7 +214,7 @@ class _CommonAppBarState extends State<CommonAppBar> {
                 CustomSnackbar.showSuccess(context, 'Switched to $companyName');
               },
             ),
-            SizedBox(width: 10,),
+            SizedBox(width: 10),
             GestureDetector(
               onTap: () async {
                 await Navigator.push(
@@ -237,7 +249,7 @@ class _CommonAppBarState extends State<CommonAppBar> {
               },
               child: CircleAvatar(
                 radius: 20,
-                backgroundColor: theme.colorScheme.surface,
+                backgroundColor: AppStyle.primaryColor,
                 child: profileImageBytes != null
                     ? isSvgBytes(profileImageBytes!)
                           ? ClipOval(
@@ -255,16 +267,12 @@ class _CommonAppBarState extends State<CommonAppBar> {
                                 height: 40,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => Icon(
-                                  Icons.person,
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.6),
+                                  HugeIcons.strokeRoundedUser,
+                                  color: Colors.white,
                                 ),
                               ),
                             )
-                    : Icon(
-                        Icons.person,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      ),
+                    : Icon(HugeIcons.strokeRoundedUser, color: Colors.white),
               ),
             ),
             const SizedBox(width: 12),
@@ -290,19 +298,20 @@ class _CommonAppBarState extends State<CommonAppBar> {
           items: [
             BottomNavigationBarItem(
               icon: Icon(HugeIcons.strokeRoundedDashboardSquare02),
-              label: translationService.getCached("Dashboard")??"Dashboard",
+              label: translationService.getCached("Dashboard") ?? "Dashboard",
             ),
             BottomNavigationBarItem(
               icon: Icon(HugeIcons.strokeRoundedUserMultiple),
-              label: translationService.getCached("Employees")??"Employees",
+              label: translationService.getCached("Employees") ?? "Employees",
             ),
             BottomNavigationBarItem(
               icon: Icon(HugeIcons.strokeRoundedTask01),
-              label: translationService.getCached("Attendances")??"Attendances",
+              label:
+                  translationService.getCached("Attendances") ?? "Attendances",
             ),
             BottomNavigationBarItem(
               icon: Icon(HugeIcons.strokeRoundedCalendar03),
-              label: translationService.getCached("Calendar")??"Calendar",
+              label: translationService.getCached("Calendar") ?? "Calendar",
             ),
           ],
           snakeViewColor: isDark ? Colors.white : AppStyle.primaryColor,

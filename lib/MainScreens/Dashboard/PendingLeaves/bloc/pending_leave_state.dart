@@ -160,3 +160,5 @@ class PendingLeaveState extends Equatable {
     tempSelectedStartDateUnit,
   ];
 }
+
+class ShowRatingDialog extends PendingLeaveState {}

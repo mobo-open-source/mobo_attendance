@@ -262,6 +262,7 @@ class PendingLeaveBloc extends Bloc<PendingLeaveEvent, PendingLeaveState> {
         errorMessage: errorMessage,
       ),
     );
+    emit(ShowRatingDialog());
 
     if (errorMessage == null) {
       add(const FetchPendingLeaves(page: 0));
@@ -288,6 +289,7 @@ class PendingLeaveBloc extends Bloc<PendingLeaveEvent, PendingLeaveState> {
         errorMessage: errorMessage,
       ),
     );
+    emit(ShowRatingDialog());
 
     if (errorMessage == null) {
       add(const FetchPendingLeaves(page: 0));
@@ -314,6 +316,7 @@ class PendingLeaveBloc extends Bloc<PendingLeaveEvent, PendingLeaveState> {
         errorMessage: errorMessage,
       ),
     );
+    emit(ShowRatingDialog());
 
     if (errorMessage == null) {
       add(const FetchPendingLeaves(page: 0));

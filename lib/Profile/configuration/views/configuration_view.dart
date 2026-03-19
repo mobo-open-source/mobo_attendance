@@ -8,6 +8,7 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../CommonWidgets/core/company/session/company_session_manager.dart';
 import '../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../CommonWidgets/core/providers/motion_provider.dart';
@@ -58,10 +59,34 @@ class ConfigurationView extends StatefulWidget {
 
 class ConfigurationViewState extends State<ConfigurationView> {
   bool isSwitching = false;
+  String? currentUrl;
+  String? currentDatabase;
+
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStoredAccounts();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadStoredAccounts();
+  }
+
+  /// Loads the list of stored accounts from SharedPreferences.
+  Future<void> _loadStoredAccounts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      currentUrl = prefs.getString('url')??"";
+      currentDatabase = prefs.getString('database')??"";
+      setState(() {});
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final motionProvider = Provider.of<MotionProvider>(context, listen: false);
     final bloc = context.read<ConfigurationBloc>();
@@ -195,8 +220,11 @@ class ConfigurationViewState extends State<ConfigurationView> {
                           : Image.memory(
                               base64Decode(profiles.first.image!),
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  const Icon(Icons.person, size: 50),
+                              errorBuilder: (_, __, ___) => const Icon(
+                                HugeIcons.strokeRoundedUser,
+                                color: Colors.white,
+                                size: 30,
+                              ),
                             )
                     : widget.profileImageBytes != null
                     ? isSvgBytes(widget.profileImageBytes!)
@@ -207,13 +235,16 @@ class ConfigurationViewState extends State<ConfigurationView> {
                           : Image.memory(
                               widget.profileImageBytes!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  const Icon(Icons.person, size: 50),
+                              errorBuilder: (_, __, ___) => const Icon(
+                                HugeIcons.strokeRoundedUser,
+                                color: Colors.white,
+                                size: 30,
+                              ),
                             )
                     : Icon(
                         HugeIcons.strokeRoundedUser,
                         size: 30,
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white,
                       ),
               ),
             ),
@@ -283,9 +314,7 @@ class ConfigurationViewState extends State<ConfigurationView> {
             ),
             title: tr(
               'Settings',
-              style: TextStyle(
-                color: isDark ? Colors.white : Colors.black87,
-              ),
+              style: TextStyle(color: isDark ? Colors.white : Colors.black87),
             ),
             subtitle: tr(
               'App preferences and sync options',
@@ -397,8 +426,18 @@ class ConfigurationViewState extends State<ConfigurationView> {
                   : null;
 
               final otherAccounts = accounts.where((user) {
-                return user["userId"] != currentUserId &&
-                    (user["userName"] ?? "").toString().isNotEmpty;
+                final userUrl = user['url'] ?? '';
+                final userDatabase = user['database'] ?? '';
+                final userName = user['userName'] ?? '';
+                final userId = user['userId'] ?? '';
+
+                final isSameAccount =
+                    userUrl == currentUrl &&
+                        userDatabase == currentDatabase &&
+                        userId ==  currentUserId;
+
+                return !isSameAccount &&
+                    userName.isNotEmpty;
               }).toList();
 
               return Column(
@@ -412,9 +451,7 @@ class ConfigurationViewState extends State<ConfigurationView> {
                           Icon(
                             HugeIcons.strokeRoundedUserAdd01,
                             size: 30,
-                            color: isDark
-                                ? Colors.grey[600]
-                                : Colors.grey[400],
+                            color: isDark ? Colors.grey[600] : Colors.grey[400],
                           ),
                           const SizedBox(height: 16),
                           tr(
@@ -424,13 +461,15 @@ class ConfigurationViewState extends State<ConfigurationView> {
                               fontSize: 16,
                             ),
                           ),
-                          SizedBox(height: 5,),
+                          SizedBox(height: 5),
                           tr(
                             'Add multiple accounts to switch between them quickly',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 14,
-                              color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
+                              color: isDark
+                                  ? Colors.grey[400]!
+                                  : Colors.grey[600]!,
                             ),
                           ),
                         ],
@@ -447,106 +486,185 @@ class ConfigurationViewState extends State<ConfigurationView> {
                       }
                     } catch (_) {}
 
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: avatar != null
-                            ? MemoryImage(avatar)
-                            : null,
-                        child: avatar == null ? const Icon(Icons.person) : null,
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF434242) : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            offset: const Offset(0, -2),
+                            blurRadius: 6,
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            offset: const Offset(0, 3),
+                            blurRadius: 6,
+                          ),
+                        ],
                       ),
-                      title: tr(
-                        user['userName'] ?? "",
-                        style: TextStyle(
-                          color: isDark ? Colors.white : Colors.black87,
-                          fontSize: 16,
-                        ),
-                      ),
-                      subtitle: tr(
-                        user['userLogin'] ?? "",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
-                        ),
-                      ),
-                      trailing:
-                          BlocListener<ConfigurationBloc, ConfigurationState>(
-                            listenWhen: (prev, curr) =>
-                                prev.switchStatus != curr.switchStatus &&
-                                curr.switchStatus == SwitchStatus.completed,
-                            listener: (context, state) {
-                              setState(() {
-                                isSwitching = false;
-                              });
-                              AppBootstrapper.reloadAppBlocs(context);
-                              Navigator.pushAndRemoveUntil(
-                                context,
-                                PageRouteBuilder(
-                                  pageBuilder: (_, animation, secondary) =>
-                                      const CommonAppBar(),
-                                  transitionDuration:
-                                      motionProvider.reduceMotion
-                                      ? Duration.zero
-                                      : const Duration(milliseconds: 300),
-                                  transitionsBuilder:
-                                      (context, animation, sec, child) =>
-                                          motionProvider.reduceMotion
-                                          ? child
-                                          : FadeTransition(
-                                              opacity: animation,
-                                              child: child,
-                                            ),
-                                ),
-                                (_) => false,
-                              );
-                            },
-                            child: TextButton(
-                              onPressed: () async {
-                                setState(() {
-                                  isSwitching = true;
-                                });
-                                context.read<ConfigurationBloc>().add(
-                                  SwitchAccountEvent(user),
-                                );
-                              },
-                              child: isSwitching
-                                  ? LoadingAnimationWidget.threeArchedCircle(
-                                      color: isDark
-                                          ? Colors.white
-                                          : AppStyle.primaryColor,
-                                      size: 20,
-                                    )
-                                  : tr(
-                                      "Switch",
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : AppStyle.primaryColor,
-                                        fontSize: 14,
-                                      ),
-                                    ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: AppStyle.primaryColor,
+                            child: avatar == null
+                                ? const Icon(
+                              HugeIcons.strokeRoundedUser,
+                              color: Colors.white,
+                            )
+                                : isSvgBytes(avatar)
+                                ? ClipOval(
+                              child: SvgPicture.memory(
+                                avatar,
+                                width: 40,
+                                height: 40,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                                : ClipOval(
+                              child: Image.memory(
+                                avatar,
+                                width: 40,
+                                height: 40,
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           ),
+                          title: Builder(
+                            builder: (_) {
+                              final name = user['userName'] ?? '';
+                              final url = user['url'] ?? '';
+                              final db = user['database'] ?? '';
+
+                              String suffix = "";
+
+                              if (url != currentUrl) {
+                                suffix = " ($url)";
+                              } else if (db != currentDatabase) {
+                                suffix = " ($db)";
+                              }
+
+                              return Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: name,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 16,
+                                        color: isDark ? Colors.white : Colors.black87,
+                                      ),
+                                    ),
+                                    if (suffix.isNotEmpty)
+                                      TextSpan(
+                                        text: suffix,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w400,
+                                          fontSize: 13,
+                                          color: Colors.blue[700],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          subtitle: tr(
+                            user['userLogin'] ?? "",
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
+                            ),
+                          ),
+                          trailing:
+                              BlocListener<ConfigurationBloc, ConfigurationState>(
+                                listenWhen: (prev, curr) =>
+                                    prev.switchStatus != curr.switchStatus &&
+                                    curr.switchStatus == SwitchStatus.completed,
+                                listener: (context, state) {
+                                  setState(() {
+                                    isSwitching = false;
+                                  });
+                                  AppBootstrapper.reloadAppBlocs(context);
+                                  Navigator.pushAndRemoveUntil(
+                                    context,
+                                    PageRouteBuilder(
+                                      pageBuilder: (_, animation, secondary) =>
+                                          const CommonAppBar(),
+                                      transitionDuration:
+                                          motionProvider.reduceMotion
+                                          ? Duration.zero
+                                          : const Duration(milliseconds: 300),
+                                      transitionsBuilder:
+                                          (context, animation, sec, child) =>
+                                              motionProvider.reduceMotion
+                                              ? child
+                                              : FadeTransition(
+                                                  opacity: animation,
+                                                  child: child,
+                                                ),
+                                    ),
+                                    (_) => false,
+                                  );
+                                },
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                                    minimumSize: const Size(50, 28),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    side: BorderSide(
+                                      color: isDark ? Colors.white : AppStyle.primaryColor,
+                                      width: 1,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    setState(() {
+                                      isSwitching = true;
+                                    });
+                                    context.read<ConfigurationBloc>().add(
+                                      SwitchAccountEvent(user),
+                                    );
+                                  },
+                                  child: isSwitching
+                                      ? LoadingAnimationWidget.threeArchedCircle(
+                                          color: isDark
+                                              ? Colors.white
+                                              : AppStyle.primaryColor,
+                                          size: 20,
+                                        )
+                                      : tr(
+                                          "Switch",
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? Colors.white
+                                                : AppStyle.primaryColor,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                        ),
+                      ),
                     );
                   }),
                   const SizedBox(height: 10),
 
                   // Add new account button
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () async{
-                          final prefs =
-                              await SharedPreferences
-                              .getInstance();
-                          final url =
-                              prefs.getString('url') ??
-                                  '';
-                          final database =
-                              prefs.getString(
-                                  'database') ??
-                                  '';
+                        onPressed: () async {
+                          final prefs = await SharedPreferences.getInstance();
+                          final url = prefs.getString('url') ?? '';
+                          final database = prefs.getString('database') ?? '';
+                          final session = await CompanySessionManager.getCurrentSession();
                           Navigator.pop(context);
                           Navigator.of(context).push(
                             MaterialPageRoute(
@@ -555,6 +673,7 @@ class ConfigurationViewState extends State<ConfigurationView> {
                                 child: ServerUrlScreen(
                                   serverUrl: url,
                                   database: database,
+                                  session: session!,
                                 ),
                               ),
                             ),
