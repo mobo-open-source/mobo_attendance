@@ -37,8 +37,8 @@ class ResetPasswordService {
         database,
         login,
       );
-      if (webFlowResult['success'] == true ||
-          webFlowResult['requiresWebView'] == true) {
+
+      if (webFlowResult['success'] == true) {
         return webFlowResult;
       }
 
@@ -119,14 +119,10 @@ class ResetPasswordService {
       }
 
       if (requiresRecaptcha) {
-        final webViewUrl = '$cleanUrl$workingEndpoint?db=$database';
-
         return {
           'success': false,
-          'requiresWebView': true,
-          'webViewUrl': webViewUrl,
           'message':
-              'This server requires additional security verification. Please complete the reset in the secure browser.',
+              'Unable to reset automatically due to server security (reCAPTCHA). Please try again later or contact your administrator.',
         };
       }
 
@@ -576,53 +572,53 @@ class ResetPasswordService {
     try {
       final loginUrl = '$cleanUrl/web/login';
       final resetUrl = '$cleanUrl/web/reset_password';
+      final dbQuery = database.isNotEmpty ? '&db=$database' : '';
 
-      final initialGet = await http
-          .get(
-            Uri.parse('$loginUrl?redirect=/web/login'),
-            headers: {
-              'User-Agent':
-                  'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36',
-              'Accept':
-                  'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            },
-          )
-          .timeout(const Duration(seconds: 15));
+      final initialResult = await _getResilient(
+        '$loginUrl?redirect=/web/login$dbQuery',
+        headers: {
+          'User-Agent':
+              'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36',
+          'Accept':
+              'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        },
+        timeout: const Duration(seconds: 25),
+      );
+      final initialGet = initialResult.$1;
 
       if (initialGet.statusCode != 200) {
 
       }
 
-      Map<String, String> cookies = {};
+      Map<String, String> cookies = {...initialResult.$2};
       final initialSetCookie = initialGet.headers['set-cookie'];
       if (initialSetCookie != null) {
         cookies.addAll(_parseCookies(initialSetCookie));
       }
 
-      final resetGet = await http
-          .get(
-            Uri.parse('$resetUrl?redirect=/web/login'),
-            headers: {
-              'User-Agent':
-                  'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36',
-              'Accept':
-                  'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-              if (cookies.isNotEmpty)
-                'Cookie': cookies.entries
-                    .map((e) => '${e.key}=${e.value}')
-                    .join('; '),
-              'Referer': '$loginUrl?redirect=/web/login',
-            },
-          )
-          .timeout(const Duration(seconds: 15));
+      final resetResult = await _getResilient(
+        '$resetUrl?redirect=/web/login$dbQuery',
+        headers: {
+          'User-Agent':
+              'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36',
+          'Accept':
+              'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          if (cookies.isNotEmpty)
+            'Cookie': cookies.entries
+                .map((e) => '${e.key}=${e.value}')
+                .join('; '),
+          'Referer': '$loginUrl?redirect=/web/login$dbQuery',
+        },
+        timeout: const Duration(seconds: 25),
+      );
+      final resetGet = resetResult.$1;
+      cookies.addAll(resetResult.$2);
 
       if (resetGet.statusCode != 200) {
         return {
           'success': false,
-          'requiresWebView': true,
-          'webViewUrl': '$cleanUrl/web/login?db=$database',
           'message':
-              'Unable to load reset form automatically. Please complete the reset in the secure browser.',
+              'Unable to load reset form automatically (status ${resetGet.statusCode}). Please try again later.',
         };
       }
 
@@ -647,7 +643,7 @@ class ResetPasswordService {
         'Accept':
             'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Origin': cleanUrl,
-        'Referer': '$resetUrl?redirect=/web/login',
+        'Referer': '$resetUrl?redirect=/web/login$dbQuery',
         if (cookies.isNotEmpty)
           'Cookie': cookies.entries
               .map((e) => '${e.key}=${e.value}')
@@ -656,7 +652,7 @@ class ResetPasswordService {
 
       final postResponse = await http
           .post(
-            Uri.parse('$resetUrl?redirect=/web/login'),
+            Uri.parse('$resetUrl?redirect=/web/login$dbQuery'),
             headers: postHeaders,
             body: Uri(queryParameters: formData).query,
           )
@@ -695,19 +691,100 @@ class ResetPasswordService {
 
       return {
         'success': false,
-        'requiresWebView': true,
-        'webViewUrl': '$cleanUrl/web/login?db=$database',
         'message':
-            'Unable to reset password automatically. Please complete the reset in the secure browser.',
+            'Unable to reset password automatically. Server returned status: ${postResponse.statusCode}. Please try again later or contact your administrator.',
       };
     } catch (e) {
+      if (e.toString().contains('TimeoutException')) {
+        return {
+          'success': false,
+          'message':
+              'Request timeout. Please check your internet connection and try again.',
+        };
+      } else if (e.toString().contains('SocketException')) {
+        return {
+          'success': false,
+          'message': 'Network error. Please check your internet connection.',
+        };
+      }
       return {
         'success': false,
-        'requiresWebView': true,
-        'webViewUrl': '$cleanUrl/web/login?db=$database',
         'message':
-            'Unable to reset password automatically. Please complete the reset in the secure browser.',
+            'Unable to reset password automatically: ${e.toString()}. Please try again later or contact your administrator.',
       };
+    }
+  }
+
+  /// Performs a GET request without letting the http client auto-follow
+  /// redirects, so it can handle Odoo's "redirect to the same URL right
+  /// after setting a fresh session cookie" pattern manually.
+  ///
+  /// Dart's http client treats any redirect back to an already-visited URI
+  /// as an infinite loop and throws, even though replaying the request once
+  /// with the newly-issued cookie is exactly what a real browser does and
+  /// resolves cleanly. Follows up to 3 redirect hops before giving up.
+  ///
+  /// Returns the final response together with any cookies collected along
+  /// the way (from every hop's Set-Cookie header, not just the last one).
+  static Future<(http.Response, Map<String, String>)> _getResilient(
+    String url, {
+    required Map<String, String> headers,
+    required Duration timeout,
+  }) async {
+    final client = http.Client();
+    try {
+      var currentUrl = url;
+      final cookies = <String, String>{};
+
+      Map<String, String> headersForCurrentHop() {
+        if (cookies.isEmpty) return headers;
+        final existingCookie = headers['Cookie'];
+        final merged = <String, String>{};
+        if (existingCookie != null) {
+          for (final pair in existingCookie.split('; ')) {
+            final idx = pair.indexOf('=');
+            if (idx > 0) merged[pair.substring(0, idx)] = pair.substring(idx + 1);
+          }
+        }
+        merged.addAll(cookies);
+        return {
+          ...headers,
+          'Cookie': merged.entries.map((e) => '${e.key}=${e.value}').join('; '),
+        };
+      }
+
+      Future<http.Response> sendNoRedirect(String requestUrl) async {
+        final request = http.Request('GET', Uri.parse(requestUrl))
+          ..followRedirects = false
+          ..headers.addAll(headersForCurrentHop());
+        final streamed = await client.send(request);
+        return http.Response.fromStream(streamed);
+      }
+
+      var response = await sendNoRedirect(currentUrl).timeout(timeout);
+      final firstSetCookie = response.headers['set-cookie'];
+      if (firstSetCookie != null) cookies.addAll(_parseCookies(firstSetCookie));
+
+      var hops = 0;
+      while (response.statusCode >= 300 &&
+          response.statusCode < 400 &&
+          hops < 3) {
+        hops++;
+        final location = response.headers['location'];
+        if (location == null) break;
+
+        currentUrl = location.startsWith('http')
+            ? location
+            : Uri.parse(currentUrl).resolve(location).toString();
+
+        response = await sendNoRedirect(currentUrl).timeout(timeout);
+        final setCookie = response.headers['set-cookie'];
+        if (setCookie != null) cookies.addAll(_parseCookies(setCookie));
+      }
+
+      return (response, cookies);
+    } finally {
+      client.close();
     }
   }
 

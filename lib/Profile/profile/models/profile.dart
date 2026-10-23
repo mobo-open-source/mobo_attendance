@@ -68,6 +68,11 @@ class Profile {
       if (field == null || field == false) {
         return '';
       }
+      // Some backends return binary fields as a map, e.g. {content: <base64>, ...}
+      if (field is Map) {
+        final content = field['content'];
+        return content == null || content == false ? '' : content.toString();
+      }
       return field.toString();
     }
 
@@ -77,7 +82,9 @@ class Profile {
       phone: extractStringField(json['phone']),
       mail: extractStringField(json['email']),
       address: extractStringField(json['contact_address']),
-      mobile: extractStringField(json['mobile']),
+      mobile: json['mobile'] != null
+          ? extractStringField(json['mobile'])
+          : extractStringField(json['mobile_phone']),
       website: extractStringField(json['website']),
       jobTitle: extractStringField(json['function']),
       image: extractStringField(json['image_1920']),

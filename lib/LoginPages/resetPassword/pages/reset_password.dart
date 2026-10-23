@@ -7,7 +7,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hugeicons/hugeicons.dart';
 
 import 'package:loading_animation_widget/loading_animation_widget.dart';
-import 'package:mobo_attendance/LoginPages/resetPassword/pages/webview_screen.dart';
 
 import '../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../CommonWidgets/core/providers/language_provider.dart';
@@ -19,7 +18,6 @@ import '../services/reset_password_service.dart';
 /// - Enter email address
 /// - Request password reset email from server
 /// - Show success / error message
-/// - Redirect to WebView if reset requires external verification
 class ResetPasswordScreen extends StatefulWidget {
   final String? url;
   final String? database;
@@ -90,7 +88,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
   /// - Validates email input
   /// - Calls ResetPasswordService
   /// - Shows success message OR error message
-  /// - Navigates to WebView if required by server
   Future<void> _sendResetEmail() async {
     final ts = context.read<LanguageProvider>();
 
@@ -137,19 +134,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
         });
         _successAnimationController.forward();
         await HapticFeedback.selectionClick();
-      } else if (result['requiresWebView'] == true) {
-        await HapticFeedback.lightImpact();
-        if (mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => WebViewScreen(
-                url: result['webViewUrl'],
-                title: 'Reset Password',
-              ),
-            ),
-          );
-        }
       } else {
         final translated = await ts.translate(result['message']);
 
@@ -253,26 +237,21 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
             ),
 
             Positioned(
-              top: 0,
+              top: 24,
               left: 0,
-              child: SafeArea(
-                bottom: false,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: _isLoading
-                        ? null
-                        : () => Navigator.of(context).pop(),
-                    borderRadius: BorderRadius.circular(32),
-                    child: Container(
-                      height: 64,
-                      width: 64,
-                      alignment: Alignment.center,
-                      child: Icon(
-                        HugeIcons.strokeRoundedArrowLeft01,
-                        color: _isLoading ? Colors.white54 : Colors.white,
-                        size: 24,
-                      ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _isLoading ? null : () => Navigator.of(context).pop(),
+                  borderRadius: BorderRadius.circular(32),
+                  child: Container(
+                    height: 64,
+                    width: 64,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      HugeIcons.strokeRoundedArrowLeft01,
+                      color: _isLoading ? Colors.white54 : Colors.white,
+                      size: 24,
                     ),
                   ),
                 ),

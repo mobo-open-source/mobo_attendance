@@ -104,11 +104,16 @@ class CommonStorageService {
 
   /// Saves a single account to the list of logged-in accounts.
   ///
-  /// Ensures uniqueness by `userLogin` and sets a default empty image if missing.
+  /// Ensures uniqueness by `userLogin` + `url` + `database` (the same account
+  /// on a different server/database is a distinct entry) and sets a default
+  /// empty image if missing.
   Future<void> saveAccount(Map<String, dynamic> account) async {
     final prefs = await SharedPreferences.getInstance();
     final accounts = await getAccounts();
-    accounts.removeWhere((a) => a['userLogin'] == account['userLogin']);
+    accounts.removeWhere((a) =>
+        a['userLogin'] == account['userLogin'] &&
+        a['url'] == account['url'] &&
+        a['database'] == account['database']);
     if (!account.containsKey('image')) {
       account['image'] = '';
     }

@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hugeicons/hugeicons.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -13,7 +12,9 @@ import '../../../../CommonWidgets/core/company/providers/company_provider.dart';
 import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../../CommonWidgets/globals.dart';
+import '../../../../CommonWidgets/shared/widgets/custom_search_textfield.dart';
 import '../../../../CommonWidgets/shared/widgets/snackbar.dart';
+import '../../../../Rating/review_service.dart';
 import '../../../AppBars/infrastructure/profile_refresh_bus.dart';
 import '../../AttendanceCreate/pages/create_attendance_page.dart';
 import '../../AttendanceForm/pages/attendance_form_page.dart';
@@ -159,7 +160,7 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
 
     final current = bloc.state;
     if (current is AttendanceLoaded) {
-      if (current.catchError) {
+      if (current.catchError || current.permissionError) {
         // Likely auth/company data issue → try to recover
         await context.read<CompanyProvider>().initialize();
         ProfileRefreshBus.notifyProfileRefresh();
@@ -196,6 +197,10 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
               context,
               'Attendance deleted successfully',
             );
+            ReviewService().trackSignificantEvent();
+            Future.delayed(const Duration(seconds: 3), () {
+              ReviewService().checkAndShowRating(context);
+            });
           }
         },
         builder: (context, state) {
@@ -214,113 +219,42 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
                         right: 16.0,
                         bottom: 16.0,
                       ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          boxShadow: [
-                            BoxShadow(
-                              color: Color(0xFF000000).withOpacity(0.05),
-                              offset: Offset(0, 6),
-                              blurRadius: 16,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        child: Consumer<LanguageProvider>(
-                          builder: (_, ts, __) {
-                            return TextField(
-                              controller: _searchController,
-                              style: TextStyle(
-                                color: isDark
-                                    ? Colors.white
-                                    : Color(0xff1E1E1E),
-                                fontWeight: FontWeight.w400,
-                                fontStyle: FontStyle.normal,
-                                fontSize: 15,
-                                height: 1.0,
-                                letterSpacing: 0.0,
-                              ),
-                              decoration: InputDecoration(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                isDense: true,
-                                alignLabelWithHint: true,
-                                hintText:
-                                    ts.getCached(
-                                      'Search by employee, date or mail',
-                                    ) ??
-                                    'Search by employee, date or mail',
-                                hintStyle: TextStyle(
-                                  color: isDark
-                                      ? Colors.white
-                                      : Color(0xff1E1E1E),
-                                  fontWeight: FontWeight.w400,
-                                  fontStyle: FontStyle.normal,
-                                  fontSize: 15,
-                                  height: 1.0,
-                                  letterSpacing: 0.0,
-                                ),
-                                prefixIcon: IconButton(
-                                  icon: Icon(
-                                    HugeIcons.strokeRoundedFilterHorizontal,
-                                    color: isDark
-                                        ? Colors.grey[400]
-                                        : Colors.grey[600],
-                                    size: 18,
+                      child: Consumer<LanguageProvider>(
+                        builder: (_, ts, __) {
+                          return CustomSearchTextField(
+                            controller: _searchController,
+                            hintText:
+                                ts.getCached(
+                                  'Search by employee, date or mail',
+                                ) ??
+                                'Search by employee, date or mail',
+                            filterTooltip:
+                                ts.getCached('Filter & Group By') ??
+                                'Filter & Group By',
+                            onFilterTap: () =>
+                                _openFilterGroupBySheet(context),
+                            onChanged: (value) {
+                              final currentState = context
+                                  .read<AttendanceListBloc>()
+                                  .state;
+                              if (currentState is AttendanceLoaded) {
+                                context.read<AttendanceListBloc>().add(
+                                  SearchAttendance(
+                                    searchText: value.trim(),
+                                    selectedFilters:
+                                        currentState.selectedFilters,
+                                    selectedGroupBy:
+                                        currentState.selectedGroupBy,
+                                    selectedCheckInUnit:
+                                        currentState.selectedCheckInUnit,
+                                    selectedCheckOutUnit:
+                                        currentState.selectedCheckOutUnit,
                                   ),
-                                  tooltip:
-                                      ts.getCached('Filter & Group By') ??
-                                      'Filter & Group By',
-                                  splashRadius: 20,
-                                  padding: EdgeInsets.zero,
-                                  constraints: BoxConstraints(
-                                    minWidth: 32,
-                                    minHeight: 32,
-                                  ),
-                                  onPressed: () =>
-                                      _openFilterGroupBySheet(context),
-                                ),
-                                filled: true,
-                                fillColor: isDark
-                                    ? Colors.grey[850]
-                                    : Colors.white,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide.none,
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: isDark
-                                        ? Colors.white
-                                        : AppStyle.primaryColor,
-                                  ),
-                                ),
-                              ),
-                              onChanged: (value) {
-                                final currentState = context
-                                    .read<AttendanceListBloc>()
-                                    .state;
-                                if (currentState is AttendanceLoaded) {
-                                  context.read<AttendanceListBloc>().add(
-                                    SearchAttendance(
-                                      searchText: value.trim(),
-                                      selectedFilters:
-                                          currentState.selectedFilters,
-                                      selectedGroupBy:
-                                          currentState.selectedGroupBy,
-                                      selectedCheckInUnit:
-                                          currentState.selectedCheckInUnit,
-                                      selectedCheckOutUnit:
-                                          currentState.selectedCheckOutUnit,
-                                    ),
-                                  );
-                                }
-                              },
-                            );
-                          },
-                        ),
+                                );
+                              }
+                            },
+                          );
+                        },
                       ),
                     ),
 
@@ -606,14 +540,6 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
                   ],
                 ),
               ),
-              // Loading overlay during paging
-              if (state is AttendanceLoaded && state.isPaging)
-                Center(
-                  child: LoadingAnimationWidget.staggeredDotsWave(
-                    color: AppStyle.primaryColor,
-                    size: 50,
-                  ),
-                ),
             ],
           );
         },
@@ -652,11 +578,48 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
 
   /// Builds main content area — handles loading / error / empty / data states
   Widget _buildBody(AttendanceListState state, bool isDark) {
-    if (state is AttendanceInitial || state is AttendanceLoading) {
+    if (state is AttendanceInitial ||
+        state is AttendanceLoading ||
+        (state is AttendanceLoaded && state.isPaging)) {
       return _buildShimmerList(isDark);
     }
 
     if (state is AttendanceLoaded) {
+      if (state.permissionError) {
+        return _buildCenteredLottie(
+          lottie: 'assets/Error_404.json',
+          title: 'Access Restricted',
+          subtitle:
+              'Your account does not have employee access permissions yet. Please contact your administrator to assign the required user role.',
+          isDark: isDark,
+          button: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: isDark ? Colors.white : AppStyle.primaryColor,
+              side: BorderSide(
+                color: isDark
+                    ? Colors.grey[600]!
+                    : AppStyle.primaryColor.withOpacity(0.3),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () async {
+              await context.read<CompanyProvider>().initialize();
+              ProfileRefreshBus.notifyProfileRefresh();
+              CompanyRefreshBus.notify();
+            },
+            child: tr(
+              'Retry',
+              style: TextStyle(
+                color: isDark ? Colors.white : AppStyle.primaryColor,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+        );
+      }
       if (!state.catchError) {
         if(!state.connectionError) {
           if (state.attendance.isEmpty) {
@@ -860,11 +823,15 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
                   ),
                   if (subtitle != null) ...[
                     const SizedBox(height: 6),
-                    tr(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isDark ? Colors.white60 : Colors.black54,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: tr(
+                        subtitle,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isDark ? Colors.white60 : Colors.black54,
+                        ),
                       ),
                     ),
                   ],

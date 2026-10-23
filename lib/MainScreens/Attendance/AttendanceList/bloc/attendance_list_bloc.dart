@@ -127,6 +127,23 @@ class AttendanceListBloc
         return;
       }
 
+      // The account is missing the Odoo HR access rights (e.g. a newly
+      // created user not yet assigned to the "Officer"/"User" role), so
+      // reading employee-linked attendance data raises an AccessError.
+      // Surface this distinctly instead of the generic error state.
+      if (e.toString().contains('AccessError')) {
+        emit(
+          AttendanceLoaded(
+            permissionError: true,
+            attendance: const [],
+            totalCount: 0,
+            currentPage: 0,
+            isPaging: false,
+          ),
+        );
+        return;
+      }
+
       if (previousState is AttendanceLoaded) {
         emit(
           previousState.copyWith(

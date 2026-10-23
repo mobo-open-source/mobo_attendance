@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../MainScreens/AppBars/pages/common_app_bar.dart';
+import '../../../MainScreens/AppBars/services/app_bootstrapper.dart';
 import '../../login/models/auth_model.dart';
 import '../../login/pages/login_screen.dart';
 import '../../startPages/get_started_screen.dart';
@@ -49,22 +48,22 @@ class AuthController {
     }
   }
 
-  /// Navigates user to dashboard with motion accessibility support.
+  /// Navigates user to dashboard.
   Future<void> _navigateToDashboard(BuildContext context) async {
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
+    // The app's data blocs are created eagerly at process start and fire
+    // their first load before this splash check even completes, often
+    // before the device's network has settled after a cold boot. Reload
+    // them now that the app has actually determined the session is valid,
+    // so a stale failure from that very first attempt doesn't stick.
+    AppBootstrapper.reloadAppBlocs(context);
 
     Navigator.pushAndRemoveUntil(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => const CommonAppBar(),
-        transitionDuration: motionProvider.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 300),
-        reverseTransitionDuration: motionProvider.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 300),
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          if (motionProvider.reduceMotion) return child;
           return FadeTransition(opacity: animation, child: child);
         },
       ),(route) => false,
@@ -73,7 +72,6 @@ class AuthController {
 
   /// Navigates user to Login or Get Started screen based on onboarding status.
   Future<void> _navigateToLogin(BuildContext context) async {
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
     final prefs = await SharedPreferences.getInstance();
     bool isGetStarted = prefs.getBool('hasSeenGetStarted')?? false;
     if(isGetStarted) {
@@ -81,14 +79,9 @@ class AuthController {
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
-          transitionDuration: motionProvider.reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 300),
-          reverseTransitionDuration: motionProvider.reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 300),
+          transitionDuration: const Duration(milliseconds: 300),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            if (motionProvider.reduceMotion) return child;
             return FadeTransition(opacity: animation, child: child);
           },
         ),
@@ -99,14 +92,9 @@ class AuthController {
         PageRouteBuilder(
           pageBuilder: (context, animation,
               secondaryAnimation) => const GetStartedScreen(),
-          transitionDuration: motionProvider.reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 300),
-          reverseTransitionDuration: motionProvider.reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 300),
+          transitionDuration: const Duration(milliseconds: 300),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            if (motionProvider.reduceMotion) return child;
             return FadeTransition(opacity: animation, child: child);
           },
         ),

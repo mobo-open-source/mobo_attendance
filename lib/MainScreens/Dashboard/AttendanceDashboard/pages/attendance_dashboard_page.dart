@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -7,9 +8,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lottie/lottie.dart';
 import 'package:mobo_attendance/CommonWidgets/globals.dart';
+import 'package:mobo_attendance/CommonWidgets/shared/widgets/qr_scanner_page.dart';
 import 'package:mobo_attendance/CommonWidgets/shared/widgets/snackbar.dart';
 import 'package:mobo_attendance/MainScreens/AppBars/infrastructure/profile_refresh_bus.dart';
 import 'package:provider/provider.dart';
@@ -18,7 +21,6 @@ import '../../../../CommonWidgets/core/company/infrastructure/company_refresh_bu
 import '../../../../CommonWidgets/core/company/providers/company_provider.dart';
 import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
-import '../../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../AppBars/pages/common_app_bar.dart';
 import '../../../Employees/EmployeeList/bloc/employee_list_bloc.dart';
 import '../../../Employees/EmployeeList/pages/employee_list_page.dart';
@@ -27,6 +29,7 @@ import '../../PendingLeaves/pages/pending_leave_page.dart';
 import '../../Report/pages/report_page.dart';
 import '../../RequestAbsence/pages/request_absence_page.dart';
 import '../bloc/attendance_dashboard_bloc.dart';
+import '../services/attendance_dashboard_service.dart';
 import '../widgets/dashboard_shimmer.dart';
 
 /// Main attendance dashboard screen.
@@ -241,7 +244,6 @@ class AttendanceDashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -255,6 +257,92 @@ class AttendanceDashboardPage extends StatelessWidget {
         builder: (context, state) {
           if (state.isLoading && !state.leaveAction) {
             return DashboardShimmer(isDark: isDark);
+          }
+          if (state.permissionError) {
+            return RefreshIndicator(
+              onRefresh: () async {
+                await context.read<CompanyProvider>().initialize();
+                ProfileRefreshBus.notifyProfileRefresh();
+                CompanyRefreshBus.notify();
+              },
+              color: isDark ? Colors.white : AppStyle.primaryColor,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Center(
+                  child: Container(
+                    height: MediaQuery.of(context).size.height * 0.8,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Lottie.asset(
+                          'assets/Error_404.json',
+                          width: 300,
+                          height: 300,
+                          fit: BoxFit.contain,
+                          repeat: true,
+                          animate: true,
+                        ),
+                        tr(
+                          'Access Restricted',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF1A1A1A),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        tr(
+                          'Your account does not have employee access permissions yet. Please contact your administrator to assign the required user role.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.normal,
+                            color: isDark ? Colors.white60 : Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton(
+                          onPressed: () async {
+                            await context.read<CompanyProvider>().initialize();
+                            ProfileRefreshBus.notifyProfileRefresh();
+                            CompanyRefreshBus.notify();
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: isDark
+                                ? Colors.white
+                                : AppStyle.primaryColor,
+                            side: BorderSide(
+                              color: isDark
+                                  ? Colors.grey[600]!
+                                  : AppStyle.primaryColor.withOpacity(0.3),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: tr(
+                            'Retry',
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.white
+                                  : AppStyle.primaryColor,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
           }
           if (state.catchError) {
             return RefreshIndicator(
@@ -442,21 +530,19 @@ class AttendanceDashboardPage extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  if (!state.accessForAdmin) ...[
-                    _buildCheckInOutButton(context, state, isDark),
-                    const SizedBox(height: 16),
-                  ],
-
                   state.accessForAdmin
                       ? _buildAdminOverview(context, state, isDark)
                       : _buildEmployeeHoursCards(state, isDark, context),
 
                   const SizedBox(height: 24),
                   if (!state.accessForAdmin) ...[
+                    _buildStatusCard(context, state, isDark),
+                    const SizedBox(height: 20),
+                    _buildMethodButtons(context, state, isDark),
+                    const SizedBox(height: 24),
                     _buildActionButtonsRow(
                       context,
                       state,
-                      motionProvider,
                       isDark,
                     ),
                   ],
@@ -634,56 +720,225 @@ class AttendanceDashboardPage extends StatelessWidget {
     );
   }
 
-  /// Renders large check-in / check-out button (employee view only)
-  Widget _buildCheckInOutButton(
+  /// Status card: current attendance state, timestamp and quick check-in/out.
+  Widget _buildStatusCard(
     BuildContext context,
     AttendanceDashboardState state,
     bool isDark,
   ) {
-    final translationService = context.watch<LanguageProvider>();
-    final checkout = translationService.getCached("CHECK OUT");
-    final checkIn = translationService.getCached("CHECK IN");
-    final loading = translationService.getCached("Loading...");
-
     final bloc = context.read<AttendanceDashboardBloc>();
+    final checkedIn = state.isCheckIn;
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final stamp = checkedIn && state.checkInTime != '--:--'
+        ? state.checkInTime
+        : '${two(now.day)}/${two(now.month)}/${now.year}  '
+              '${two(now.hour)}:${two(now.minute)}';
+    final accent = AppStyle.primaryColor;
+    final statusColor = checkedIn ? Colors.green : Colors.grey;
 
-    final String label = state.isCheckIn ? '$checkout' : '$checkIn';
-    final IconData icon = state.isCheckIn
-        ? HugeIcons.strokeRoundedLogout02
-        : HugeIcons.strokeRoundedLogin02;
-    final Color color = state.isCheckIn ? Colors.red : Colors.green;
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: state.isCheckInLoading
-            ? null
-            : () => state.isCheckIn
-                  ? bloc.add(CheckOutRequested())
-                  : bloc.add(CheckInRequested()),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: isDark ? Colors.white : Colors.black87,
-          backgroundColor: isDark ? Colors.grey[900] : Colors.white,
-          side: BorderSide(color: isDark ? Colors.white : color, width: 2),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey[900] : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black.withOpacity(0.06),
         ),
-        icon: state.isCheckInLoading
-            ? LoadingAnimationWidget.staggeredDotsWave(
-                color: isDark ? Colors.white : color,
-                size: 24,
-              )
-            : Icon(icon, color: isDark ? Colors.white : color),
-        label: Text(
-          state.isCheckInLoading ? '$loading' : label,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : color,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
-        ),
+        ],
       ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: statusColor.withOpacity(0.12),
+            ),
+            child: Icon(
+              checkedIn
+                  ? Icons.check_circle_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              color: statusColor,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                tr(
+                  checkedIn ? 'Checked In' : 'Not Checked In',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  stamp,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: state.isCheckInLoading
+                ? null
+                : () => checkedIn
+                      ? bloc.add(CheckOutRequested())
+                      : bloc.add(CheckInRequested()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accent,
+              disabledBackgroundColor: accent.withOpacity(0.4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+            icon: state.isCheckInLoading
+                ? LoadingAnimationWidget.staggeredDotsWave(
+                    color: Colors.white,
+                    size: 20,
+                  )
+                : Icon(
+                    checkedIn
+                        ? HugeIcons.strokeRoundedLogout02
+                        : HugeIcons.strokeRoundedLogin02,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+            label: tr(
+              checkedIn ? 'Check Out' : 'Check In',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Check-in / check-out method buttons: GPS, QR code and selfie.
+  Widget _buildMethodButtons(
+    BuildContext context,
+    AttendanceDashboardState state,
+    bool isDark,
+  ) {
+    final bloc = context.read<AttendanceDashboardBloc>();
+    final checkingOut = state.isCheckIn;
+    final disabled = state.isCheckInLoading;
+    final accent = AppStyle.primaryColor;
+
+    void dispatch(
+      AttendanceMethod method, {
+      String? qrValue,
+      Uint8List? selfieBytes,
+    }) {
+      bloc.add(
+        checkingOut
+            ? CheckOutRequested(
+                method: method,
+                qrValue: qrValue,
+                selfieBytes: selfieBytes,
+              )
+            : CheckInRequested(
+                method: method,
+                qrValue: qrValue,
+                selfieBytes: selfieBytes,
+              ),
+      );
+    }
+
+    Future<void> onQr() async {
+      final code = await QrScannerPage.scan(context, title: 'Scan QR Code');
+      if (code != null) dispatch(AttendanceMethod.qr, qrValue: code);
+    }
+
+    Future<void> onSelfie() async {
+      try {
+        final file = await ImagePicker().pickImage(
+          source: ImageSource.camera,
+          preferredCameraDevice: CameraDevice.front,
+          maxWidth: 480,
+          imageQuality: 70,
+        );
+        if (file == null) return;
+        dispatch(AttendanceMethod.selfie, selfieBytes: await file.readAsBytes());
+      } catch (_) {
+        if (context.mounted) {
+          CustomSnackbar.showError(context, 'Camera permission is required');
+        }
+      }
+    }
+
+    Widget methodButton(IconData icon, String label, VoidCallback onTap) {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: disabled ? null : onTap,
+          icon: Icon(icon, color: Colors.white),
+          label: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: accent,
+            disabledBackgroundColor: accent.withOpacity(0.4),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+          ),
+        ),
+      );
+    }
+
+    final action = checkingOut ? 'Check-Out' : 'Check-In';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 10),
+          child: tr(
+            '$action Methods',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : Colors.black54,
+            ),
+          ),
+        ),
+        methodButton(
+          Icons.location_on_rounded,
+          'GPS $action',
+          () => dispatch(AttendanceMethod.gps),
+        ),
+        const SizedBox(height: 10),
+        methodButton(Icons.qr_code_scanner_rounded, 'QR Code $action', onQr),
+        const SizedBox(height: 10),
+        methodButton(Icons.camera_alt_rounded, 'Selfie $action', onSelfie),
+      ],
     );
   }
 
@@ -693,7 +948,6 @@ class AttendanceDashboardPage extends StatelessWidget {
     AttendanceDashboardState state,
     bool isDark,
   ) {
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
     final translationService = context.read<LanguageProvider>();
     final locale = translationService.currentCode;
 
@@ -732,22 +986,14 @@ class AttendanceDashboardPage extends StatelessWidget {
               count: state.staffCount?.toString() ?? "0",
               subtitle: catchTranslate(context, 'Total active staff members'),
               onTap: () {
-                final motionProvider = Provider.of<MotionProvider>(
-                  context,
-                  listen: false,
-                );
                 Navigator.pushReplacement(
                   context,
                   PageRouteBuilder(
                     pageBuilder: (_, __, ___) =>
                         const CommonAppBar(initialIndex: 1),
-                    transitionDuration: motionProvider.reduceMotion
-                        ? Duration.zero
-                        : const Duration(milliseconds: 300),
+                    transitionDuration: const Duration(milliseconds: 300),
                     transitionsBuilder: (_, animation, __, child) =>
-                        motionProvider.reduceMotion
-                        ? child
-                        : FadeTransition(opacity: animation, child: child),
+                        FadeTransition(opacity: animation, child: child),
                   ),
                 );
               },
@@ -808,7 +1054,11 @@ class AttendanceDashboardPage extends StatelessWidget {
             ),
           ],
         ),
-        SizedBox(height: 30),
+        const SizedBox(height: 24),
+        _buildStatusCard(context, state, isDark),
+        const SizedBox(height: 20),
+        _buildMethodButtons(context, state, isDark),
+        const SizedBox(height: 30),
 
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 5),
@@ -830,13 +1080,9 @@ class AttendanceDashboardPage extends StatelessWidget {
               context,
               PageRouteBuilder(
                 pageBuilder: (_, __, ___) => ReportPage(),
-                transitionDuration: motionProvider.reduceMotion
-                    ? Duration.zero
-                    : const Duration(milliseconds: 300),
+                transitionDuration: const Duration(milliseconds: 300),
                 transitionsBuilder: (_, animation, __, child) =>
-                    motionProvider.reduceMotion
-                    ? child
-                    : FadeTransition(opacity: animation, child: child),
+                    FadeTransition(opacity: animation, child: child),
               ),
             );
           },
@@ -846,7 +1092,7 @@ class AttendanceDashboardPage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
             decoration: BoxDecoration(
               color: isDark ? Colors.grey[850] : Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
                   color: isDark
@@ -916,13 +1162,9 @@ class AttendanceDashboardPage extends StatelessWidget {
                 context,
                 PageRouteBuilder(
                   pageBuilder: (_, __, ___) => PendingLeavePage(),
-                  transitionDuration: motionProvider.reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 300),
+                  transitionDuration: const Duration(milliseconds: 300),
                   transitionsBuilder: (_, animation, __, child) =>
-                      motionProvider.reduceMotion
-                      ? child
-                      : FadeTransition(opacity: animation, child: child),
+                      FadeTransition(opacity: animation, child: child),
                 ),
               );
           },
@@ -932,7 +1174,7 @@ class AttendanceDashboardPage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
             decoration: BoxDecoration(
               color: isDark ? Colors.grey[850] : Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
                   color: isDark
@@ -1019,7 +1261,7 @@ class AttendanceDashboardPage extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: isDark ? Colors.grey[850] : Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
                   color: isDark ? Colors.black26 : Colors.grey.withOpacity(0.2),
@@ -1038,7 +1280,7 @@ class AttendanceDashboardPage extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: isDark ? Colors.grey[850] : Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
                   color: isDark ? Colors.black26 : Colors.grey.withOpacity(0.2),
@@ -1100,7 +1342,7 @@ class AttendanceDashboardPage extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isDark ? Colors.grey[850] : Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
 
           boxShadow: [
             BoxShadow(
@@ -1243,8 +1485,7 @@ class AttendanceDashboardPage extends StatelessWidget {
                           tooltipMargin: 0,
                         ),
                         touchCallback: (event, response) {
-                          if (response == null || response.spot == null)
-                            return;
+                          if (response == null || response.spot == null) return;
 
                           if (event is! FlTapUpEvent) return;
 
@@ -1289,9 +1530,7 @@ class AttendanceDashboardPage extends StatelessWidget {
                                   '${catchTranslate(context, '$label')} ${catchTranslate(context, 'Details')}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: isDark
-                                        ? Colors.white
-                                        : Colors.black,
+                                    color: isDark ? Colors.white : Colors.black,
                                     fontSize: 18,
                                   ),
                                 ),
@@ -1323,10 +1562,7 @@ class AttendanceDashboardPage extends StatelessWidget {
                                         ),
                                       ),
                                       TextSpan(
-                                        text: catchTranslate(
-                                          context,
-                                          '$label',
-                                        ),
+                                        text: catchTranslate(context, '$label'),
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           color: isDark
@@ -1433,9 +1669,7 @@ class AttendanceDashboardPage extends StatelessWidget {
                               value.toInt().toString(),
                               style: TextStyle(
                                 fontSize: 10,
-                                color: isDark
-                                    ? Colors.white54
-                                    : Colors.black54,
+                                color: isDark ? Colors.white54 : Colors.black54,
                               ),
                             ),
                           ),
@@ -2011,7 +2245,7 @@ class AttendanceDashboardPage extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isDark ? Colors.grey[850] : Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
 
         boxShadow: [
           BoxShadow(
@@ -2090,7 +2324,6 @@ class AttendanceDashboardPage extends StatelessWidget {
   Widget _buildActionButtonsRow(
     BuildContext context,
     AttendanceDashboardState state,
-    MotionProvider motionProvider,
     bool isDark,
   ) {
     final translationService = context.watch<LanguageProvider>();
@@ -2120,13 +2353,9 @@ class AttendanceDashboardPage extends StatelessWidget {
                   context,
                   PageRouteBuilder(
                     pageBuilder: (_, __, ___) => PendingLeavePage(),
-                    transitionDuration: motionProvider.reduceMotion
-                        ? Duration.zero
-                        : const Duration(milliseconds: 300),
+                    transitionDuration: const Duration(milliseconds: 300),
                     transitionsBuilder: (_, animation, __, child) =>
-                        motionProvider.reduceMotion
-                        ? child
-                        : FadeTransition(opacity: animation, child: child),
+                        FadeTransition(opacity: animation, child: child),
                   ),
                 );
             },
@@ -2136,7 +2365,7 @@ class AttendanceDashboardPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
               decoration: BoxDecoration(
                 color: isDark ? Colors.grey[850] : Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
                     color: isDark
@@ -2210,13 +2439,9 @@ class AttendanceDashboardPage extends StatelessWidget {
                 context,
                 PageRouteBuilder(
                   pageBuilder: (_, __, ___) => RequestAbsencePage(),
-                  transitionDuration: motionProvider.reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 300),
+                  transitionDuration: const Duration(milliseconds: 300),
                   transitionsBuilder: (_, animation, __, child) =>
-                      motionProvider.reduceMotion
-                      ? child
-                      : FadeTransition(opacity: animation, child: child),
+                      FadeTransition(opacity: animation, child: child),
                 ),
               );
           },
@@ -2226,7 +2451,7 @@ class AttendanceDashboardPage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
             decoration: BoxDecoration(
               color: isDark ? Colors.grey[850] : Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
                   color: isDark
@@ -2298,13 +2523,9 @@ class AttendanceDashboardPage extends StatelessWidget {
                 context,
                 PageRouteBuilder(
                   pageBuilder: (_, __, ___) => LeaveHistoryPage(),
-                  transitionDuration: motionProvider.reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 300),
+                  transitionDuration: const Duration(milliseconds: 300),
                   transitionsBuilder: (_, animation, __, child) =>
-                      motionProvider.reduceMotion
-                      ? child
-                      : FadeTransition(opacity: animation, child: child),
+                      FadeTransition(opacity: animation, child: child),
                 ),
               );
           },
@@ -2314,7 +2535,7 @@ class AttendanceDashboardPage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
             decoration: BoxDecoration(
               color: isDark ? Colors.grey[850] : Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
                   color: isDark
@@ -2396,7 +2617,7 @@ class AttendanceDashboardPage extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -2405,85 +2626,95 @@ class AttendanceDashboardPage extends StatelessWidget {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            state.recentActivity.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Icon(
-                            HugeIcons.strokeRoundedActivity01,
-                            color: isDark ? Colors.white60 : Colors.black54,
-                            size: 24,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Material(
+          color: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                state.recentActivity.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Icon(
+                                HugeIcons.strokeRoundedActivity01,
+                                color: isDark ? Colors.white60 : Colors.black54,
+                                size: 24,
+                              ),
+                              const SizedBox(height: 20),
+                              tr(
+                                'No recent activity',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white60
+                                      : Colors.black54,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 20),
-                          tr(
-                            'No recent activity',
-                            style: TextStyle(
-                              color: isDark ? Colors.white60 : Colors.black54,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
+                        ),
+                      )
+                    : ListView.separated(
+                        physics: const NeverScrollableScrollPhysics(),
+                        shrinkWrap: true,
+                        itemCount: state.recentActivity.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, index) {
+                          final item = state.recentActivity[index];
+                          final isCheckIn = item['type'] == 'Check In';
+                          return ListTile(
+                            leading: Icon(
+                              isCheckIn
+                                  ? HugeIcons.strokeRoundedLogin02
+                                  : HugeIcons.strokeRoundedLogout02,
+                              color: isCheckIn
+                                  ? (isDark ? Colors.white54 : Colors.green)
+                                  : (isDark ? Colors.white54 : Colors.red),
                             ),
-                          ),
-                        ],
+                            title: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                tr(
+                                  item['type']!,
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : Colors.black,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  localeTime(item['time'].toString(), locale),
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.white70
+                                        : Colors.black87,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            trailing: Text(
+                              item['mode']!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? Colors.white60 : Colors.black54,
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    ),
-                  )
-                : ListView.separated(
-                    physics: const NeverScrollableScrollPhysics(),
-                    shrinkWrap: true,
-                    itemCount: state.recentActivity.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (_, index) {
-                      final item = state.recentActivity[index];
-                      final isCheckIn = item['type'] == 'Check In';
-                      return ListTile(
-                        leading: Icon(
-                          isCheckIn
-                              ? HugeIcons.strokeRoundedLogin02
-                              : HugeIcons.strokeRoundedLogout02,
-                          color: isCheckIn
-                              ? (isDark ? Colors.white54 : Colors.green)
-                              : (isDark ? Colors.white54 : Colors.red),
-                        ),
-                        title: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            tr(
-                              item['type']!,
-                              style: TextStyle(
-                                color: isDark ? Colors.white : Colors.black,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            Text(
-                              localeTime(item['time'].toString(), locale),
-                              style: TextStyle(
-                                color: isDark ? Colors.white70 : Colors.black87,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                        trailing: Text(
-                          item['mode']!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark ? Colors.white60 : Colors.black54,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

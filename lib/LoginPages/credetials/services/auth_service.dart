@@ -6,6 +6,18 @@ import '../../../CommonWidgets/core/security/self_signed.dart';
 import '../../login/models/auth_model.dart';
 import '../../login/models/session_model.dart';
 
+/// Thrown when the Odoo database subscription has expired.
+class DatabaseExpiredException implements Exception {
+  final String message;
+  const DatabaseExpiredException([
+    this.message =
+        'This database has expired. Please renew your Odoo subscription or contact your administrator.',
+  ]);
+
+  @override
+  String toString() => 'DatabaseExpiredException: $message';
+}
+
 /// Handles all authentication-related operations:
 /// - Biometric authentication (Local device security)
 /// - Odoo session authentication (Server-side login)
@@ -98,6 +110,33 @@ class AuthService {
     );
     final data = jsonDecode(response.body);
     return Map<String, dynamic>.from(data['result']);
+  }
+
+  /// Returns true when the server reports the database as expired.
+  ///
+  /// Odoo Enterprise exposes `expiration_date` in the session info. Any
+  /// failure while checking is ignored so that login is never blocked by
+  /// the check itself.
+  Future<bool> isDatabaseExpired(String url, String sessionId) async {
+    try {
+      final info = await getSessionInfo(url, sessionId);
+      final raw = info['expiration_date'];
+      if (raw == null || raw == false || raw.toString().isEmpty) return false;
+      final expiry = DateTime.tryParse(raw.toString().replaceFirst(' ', 'T'));
+      if (expiry == null) return false;
+      return DateTime.now().toUtc().isAfter(
+        DateTime.utc(
+          expiry.year,
+          expiry.month,
+          expiry.day,
+          expiry.hour,
+          expiry.minute,
+          expiry.second,
+        ),
+      );
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Generic RPC call using existing session cookie.

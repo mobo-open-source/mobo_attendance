@@ -27,12 +27,14 @@ class CalendarLoading extends CalendarState {}
 ///   - [catchError]           → generic failure (RPC error, parsing issue, etc.)
 ///   - [connectionError]      → network/server unreachable (SocketException)
 ///   - [isAppNotInstalled]    → required Odoo module (attendance/leave) not installed
+///   - [permissionError]      → user account lacks employee/HR access rights in Odoo
 class CalendarLoaded extends CalendarState {
   final List<Map<String, dynamic>> attendanceData;
   final Map<int, Map<String, String>> workSchedule;
   final bool catchError;
   final bool connectionError;
   final bool isAppNotInstalled;
+  final bool permissionError;
 
   const CalendarLoaded({
     required this.attendanceData,
@@ -40,6 +42,7 @@ class CalendarLoaded extends CalendarState {
     this.catchError = false,
     this.connectionError = false,
     this.isAppNotInstalled = false,
+    this.permissionError = false,
   });
 
   /// All fields included in equality check to prevent unnecessary rebuilds
@@ -50,6 +53,7 @@ class CalendarLoaded extends CalendarState {
     catchError,
     connectionError,
     isAppNotInstalled,
+    permissionError,
   ];
 }
 

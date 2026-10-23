@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../Rating/review_service.dart';
 import '../services/employee_create_service.dart';
 import 'employee_create_event.dart';
 import 'employee_create_state.dart';
@@ -729,11 +730,29 @@ class EmployeeCreateBloc
             : state.workPermitExpire.trim(),
         'address_id': state.addressId ?? false,
         'work_location_id': state.workLocationId ?? false,
-        'resource_calendar_id': state.workingHoursId ?? false,
-        'tz': state.timezone ?? false,
       };
 
       // Version-specific field name adjustments
+      // Only send working hours when chosen; sending false overrides Odoo's
+      // company default, and Odoo 20 requires resource_calendar_id.
+      if (state.timezone != null) {
+        data['tz'] = state.timezone!;
+      }
+      if (state.workingHoursId != null) {
+        data['resource_calendar_id'] = state.workingHoursId!;
+      }
+
+      if (majorVersion >= 20) {
+        // Odoo 20: `employee_type` selection became `employee_type_id`
+        // (hr.employee.type), and these fields were removed from hr.employee.
+        data.remove('employee_type');
+        data.remove('private_car_plate');
+        data.remove('ssnid');
+        data.remove('study_school');
+        final typeId = await _service.findEmployeeTypeId(state.employeeType);
+        if (typeId != null) data['employee_type_id'] = typeId;
+      }
+
       if (majorVersion >= 19) {
         data['primary_bank_account_id'] = state.privateBankId ?? false;
         data['sex'] = state.gender ?? false;
@@ -784,6 +803,8 @@ class EmployeeCreateBloc
             employeeId: response['employee_id'],
           ),
         );
+        ReviewService().trackSignificantEvent();
+
       } else {
         String errorMsg = "Failed to create employee";
 

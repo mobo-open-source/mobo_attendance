@@ -294,6 +294,13 @@ class PrivateInfoService {
       ];
     }
 
+    if (majorVersion >= 20) {
+      // Removed from hr.employee in Odoo 20
+      fields.removeWhere(
+        (f) => const {'private_car_plate', 'ssnid', 'study_school'}.contains(f),
+      );
+    }
+
     try {
       final employeeDetails = await CompanySessionManager.callKwWithCompany({
         'model': 'hr.employee',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -34,6 +35,9 @@ class _LogoutDialogState extends State<LogoutDialog> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (isLogoutLoading) {
+      return PopScope(canPop: false, child: _buildLoadingDialog(isDark));
+    }
     return AlertDialog(
       backgroundColor: isDark ? Colors.grey[800] : Colors.white,
       title: Row(
@@ -56,10 +60,7 @@ class _LogoutDialogState extends State<LogoutDialog> {
           SizedBox(height: 15),
           tr(
             'Are you sure you want to log out? Your session will be ended.',
-            style: TextStyle(
-              fontWeight: FontWeight.normal,
-              fontSize: 15,
-            ),
+            style: TextStyle(fontWeight: FontWeight.normal, fontSize: 15),
           ),
         ],
       ),
@@ -74,6 +75,8 @@ class _LogoutDialogState extends State<LogoutDialog> {
                   Navigator.pop(context);
                 },
                 style: OutlinedButton.styleFrom(
+                  elevation: 0,
+                  shadowColor: Colors.transparent,
                   foregroundColor: isDark ? Colors.white : Colors.black87,
                   backgroundColor: isDark ? Colors.grey[800] : Colors.white,
                   side: BorderSide(
@@ -111,19 +114,51 @@ class _LogoutDialogState extends State<LogoutDialog> {
                     horizontal: 20,
                     vertical: 12,
                   ),
-                  elevation: isDark ? 0 : 3,
+                  elevation: 0,
+                  shadowColor: Colors.transparent,
                 ),
                 child: isLogoutLoading
                     ? const CircularProgressIndicator(color: Colors.white)
-                    :  tr(
-                  'Log Out',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
+                    : tr(
+                        'Log Out',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
               ),
             ),
           ],
         ),
       ],
+    );
+  }
+
+  /// Loading content shown in place of the confirmation while logging out.
+  Widget _buildLoadingDialog(bool isDark) {
+    return Dialog(
+      backgroundColor: isDark ? Colors.grey[900] : Colors.grey[50],
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LoadingAnimationWidget.fourRotatingDots(
+              color: isDark ? Colors.white : AppStyle.primaryColor,
+              size: 50,
+            ),
+            const SizedBox(height: 20),
+            tr(
+              "Logging out...",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            tr(
+              "Please wait while we process your request.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -141,46 +176,8 @@ class _LogoutDialogState extends State<LogoutDialog> {
   Future<void> _performLogout(BuildContext context) async {
     setState(() => isLogoutLoading = true);
 
-    // Show non-dismissible loading overlay
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Dialog(
-          backgroundColor: isDark ? Colors.grey[900] : Colors.grey[50],
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LoadingAnimationWidget.fourRotatingDots(
-                  color: isDark ? Colors.white : AppStyle.primaryColor,
-                  size: 50,
-                ),
-                const SizedBox(height: 20),
-                tr(
-                  "Logging out...",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                tr(
-                  "Please wait while we process your request.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    // The loading UI replaces this dialog's content (see build) instead of
+    // stacking a second dialog on top, which left a gray edge showing.
 
     // Artificial delay to ensure user sees loading (UX polish)
     await Future.delayed(const Duration(seconds: 2));
@@ -209,6 +206,12 @@ class _LogoutDialogState extends State<LogoutDialog> {
     await CompanySessionManager.clearSessionCache();
     await SecureStorageService().deleteAllPasswords();
 
+    // Purge any lingering 2FA "trust this device" cookie so the next login
+    // is not able to silently bypass the TOTP step.
+    try {
+      await CookieManager.instance().deleteAllCookies();
+    } catch (_) {}
+
     // ── Shut down all major BLoCs ────────────────────────────────────────────
     AppShutdownManager.resetAllBlocs();
 
@@ -219,6 +222,6 @@ class _LogoutDialogState extends State<LogoutDialog> {
       CustomSnackbar.showSuccess(context, 'Logged out successfully');
     }
 
-    setState(() => isLogoutLoading = false);
+    if (mounted) setState(() => isLogoutLoading = false);
   }
 }

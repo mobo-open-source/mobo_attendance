@@ -68,8 +68,13 @@ class EmployeeCreateInfo extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Sync controller text with external value when it changes
-    if (controller != null && controller!.text != value) {
-      controller!.text = value;
+    // (deferred: mutating the controller during build notifies listeners
+    // that are mid-build and triggers setState-during-build errors)
+    final c = controller;
+    if (c != null && c.text != value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (c.text != value) c.text = value;
+      });
     }
 
     return Padding(

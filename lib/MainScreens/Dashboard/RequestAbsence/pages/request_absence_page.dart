@@ -5,9 +5,9 @@ import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:provider/provider.dart';
 import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
-import '../../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../../CommonWidgets/globals.dart';
 import '../../../../CommonWidgets/shared/widgets/snackbar.dart';
+import '../../../../Rating/review_service.dart';
 import '../../../AppBars/pages/common_app_bar.dart';
 import '../bloc/request_absence_bloc.dart';
 import '../bloc/request_absence_event.dart';
@@ -72,7 +72,6 @@ class _RequestAbsenceViewState extends State<RequestAbsenceView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final motionProvider = Provider.of<MotionProvider>(context);
     final translationService = context.watch<LanguageProvider>();
 
     return Scaffold(
@@ -119,16 +118,16 @@ class _RequestAbsenceViewState extends State<RequestAbsenceView> {
           // Handle success: show snackbar + navigate back to dashboard
           if (state.success) {
             CustomSnackbar.showSuccess(context, "Leave created successfully");
+            Future.delayed(const Duration(seconds: 3), () {
+              ReviewService().checkAndShowRating(context);
+            });
             Navigator.pushReplacement(
               context,
               PageRouteBuilder(
                 pageBuilder: (_, __, ___) =>
                     const CommonAppBar(initialIndex: 0),
-                transitionDuration: motionProvider.reduceMotion
-                    ? Duration.zero
-                    : const Duration(milliseconds: 300),
+                transitionDuration: const Duration(milliseconds: 300),
                 transitionsBuilder: (_, animation, __, child) {
-                  if (motionProvider.reduceMotion) return child;
                   return FadeTransition(opacity: animation, child: child);
                 },
               ),

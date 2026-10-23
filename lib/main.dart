@@ -5,13 +5,11 @@ import 'package:video_player/video_player.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/widgets.dart';
 import 'package:intl/date_symbol_data_local.dart';
-
 import 'CommonWidgets/core/company/providers/company_provider.dart';
 import 'CommonWidgets/core/language/translation_strings.dart';
 import 'CommonWidgets/core/navigation/global_keys.dart';
 import 'CommonWidgets/core/providers/language_provider.dart';
 import 'CommonWidgets/core/providers/locale_provider.dart';
-import 'CommonWidgets/core/providers/motion_provider.dart';
 import 'CommonWidgets/core/providers/theme_provider.dart';
 import 'LoginPages/login/pages/login_screen.dart';
 import 'LoginPages/startPages/splash_screen.dart';
@@ -73,10 +71,6 @@ void main() async {
     await translationService.preload(TranslationStrings.preloadKeys);
   }
 
-  // Load reduce motion preference (accessibility)
-  final reduceMotion =
-      await settingsStorageService.getBool('reduceMotion') ?? false;
-
   // Initialize and start splash screen background video
   final VideoPlayerController videoController = VideoPlayerController.asset(
     'assets/Attendance.mp4',
@@ -94,9 +88,6 @@ void main() async {
 
         // Theme & appearance
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(
-          create: (_) => MotionProvider()..setReduceMotion(reduceMotion),
-        ),
 
         // Company/session data
         ChangeNotifierProvider(
@@ -260,22 +251,12 @@ class _LoginAppState extends State<LoginApp> {
             builder = (context) => SplashScreen();
         }
 
-        final motionProvider = Provider.of<MotionProvider>(
-          navigatorKey.currentContext!,
-          listen: false,
-        );
-
         return PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
               builder(context),
-          transitionDuration: motionProvider.reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 300),
-          reverseTransitionDuration: motionProvider.reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 300),
+          transitionDuration: const Duration(milliseconds: 300),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            if (motionProvider.reduceMotion) return child;
             return FadeTransition(opacity: animation, child: child);
           },
         );

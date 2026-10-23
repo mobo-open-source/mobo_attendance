@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,6 +8,9 @@ import 'package:odoo_rpc/odoo_rpc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../CommonWidgets/core/company/session/company_session_manager.dart';
+
+/// Method used to verify a check-in / check-out.
+enum AttendanceMethod { gps, qr, selfie }
 
 /// Service layer responsible for all backend communication related to the
 /// attendance dashboard.
@@ -162,26 +166,29 @@ class AttendanceDashboardService {
   /// record (check_out = false)
   Future<Map<String, dynamic>> getPresentEmployees() async {
     try {
+      // search_read + dedupe instead of read_group: Odoo 20 changed the
+      // read_group signature/return shape, which broke this count.
       final result = await CompanySessionManager.callKwWithCompany({
         'model': 'hr.attendance',
-        'method': 'read_group',
+        'method': 'search_read',
         'args': [
           [
             ['check_out', '=', false],
           ],
-          ['employee_id'],
-          ['employee_id'],
         ],
-        'kwargs': {},
+        'kwargs': {
+          'fields': ['employee_id'],
+        },
       });
 
-      final List<dynamic> attendances = result as List<dynamic>;
+      final Set<int> ids = {};
+      for (final rec in (result as List<dynamic>)) {
+        final emp = rec['employee_id'];
+        if (emp is List && emp.isNotEmpty) ids.add(emp.first as int);
+      }
+      final List<int> employeeIds = ids.toList();
 
-      final List<int> employeeIds = attendances
-          .map<int>((e) => (e['employee_id'] as List).first as int)
-          .toList();
-
-      return {'count': attendances.length, 'employeeIds': employeeIds};
+      return {'count': employeeIds.length, 'employeeIds': employeeIds};
     } catch (e) {
       throw Exception('Failed to get present employees: $e');
     }
@@ -403,6 +410,91 @@ class AttendanceDashboardService {
     } catch (e) {
       return false;
     }
+  }
+
+  /// Validates the chosen check-in/out method before the punch is sent.
+  ///
+  /// Returns an error message, or null when the method is verified.
+  /// GPS needs no extra check; QR must match the employee badge barcode.
+  Future<String?> verifyMethod(AttendanceMethod method, String? qrValue) async {
+    if (method != AttendanceMethod.qr) return null;
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('userId') ?? 0;
+    final result = await CompanySessionManager.callKwWithCompany({
+      'model': 'hr.employee',
+      'method': 'search_read',
+      'args': [
+        [
+          ['user_id', '=', userId],
+        ],
+      ],
+      'kwargs': {
+        'fields': ['barcode'],
+        'limit': 1,
+      },
+    });
+    final barcode = (result is List && result.isNotEmpty)
+        ? result[0]['barcode']
+        : null;
+    if (barcode is! String || barcode.isEmpty) {
+      return 'No badge ID is configured for your employee profile';
+    }
+    if (qrValue == null || qrValue.trim() != barcode.trim()) {
+      return 'Invalid QR code. Please scan your own badge code';
+    }
+    return null;
+  }
+
+  /// Attaches a selfie photo to the employee's latest attendance record.
+  /// Best effort: the punch itself has already succeeded.
+  Future<void> attachSelfie(Uint8List bytes) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('userId') ?? 0;
+      final employee = await CompanySessionManager.callKwWithCompany({
+        'model': 'hr.employee',
+        'method': 'search_read',
+        'args': [
+          [
+            ['user_id', '=', userId],
+          ],
+        ],
+        'kwargs': {
+          'fields': ['id'],
+          'limit': 1,
+        },
+      });
+      if (employee == null || employee.isEmpty) return;
+      final attendance = await CompanySessionManager.callKwWithCompany({
+        'model': 'hr.attendance',
+        'method': 'search_read',
+        'args': [],
+        'kwargs': {
+          'domain': [
+            ['employee_id', '=', employee[0]['id']],
+          ],
+          'fields': ['id'],
+          'order': 'id desc',
+          'limit': 1,
+        },
+      });
+      if (attendance == null || attendance.isEmpty) return;
+      final id = attendance[0]['id'];
+      await CompanySessionManager.callKwWithCompany({
+        'model': 'ir.attachment',
+        'method': 'create',
+        'args': [
+          {
+            'name': 'attendance_selfie_$id.jpg',
+            'datas': base64Encode(bytes),
+            'res_model': 'hr.attendance',
+            'res_id': id,
+            'mimetype': 'image/jpeg',
+          },
+        ],
+        'kwargs': {},
+      });
+    } catch (_) {}
   }
 
   /// Checks if the current user has an open attendance record (check_out = false)

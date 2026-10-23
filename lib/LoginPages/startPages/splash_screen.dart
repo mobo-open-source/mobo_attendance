@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../CommonWidgets/shared/widgets/snackbar.dart';
+import '../../Rating/review_service.dart';
 import '../credetials/controllers/auth_controller.dart';
 import '../credetials/services/auth_service.dart';
 import '../credetials/services/storage_service.dart';
@@ -39,6 +40,11 @@ class _SplashScreenState extends State<SplashScreen> {
 
     _startAuthCheck();
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(seconds: 2), () {
+        ReviewService().trackAppOpen();
+      });
+    });
   }
 
   /// Performs biometric authentication if available.

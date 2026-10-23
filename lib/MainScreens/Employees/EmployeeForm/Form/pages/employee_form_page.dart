@@ -17,9 +17,9 @@ import '../../../../../CommonWidgets/core/company/providers/company_provider.dar
 import '../../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../../CommonWidgets/core/navigation/data_loss_warning_dialog.dart';
 import '../../../../../CommonWidgets/core/providers/language_provider.dart';
-import '../../../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../../../CommonWidgets/globals.dart';
 import '../../../../../CommonWidgets/shared/widgets/snackbar.dart';
+import '../../../../../Rating/review_service.dart';
 import '../../../../AppBars/infrastructure/profile_refresh_bus.dart';
 import '../../../../AppBars/pages/common_app_bar.dart';
 import '../../SmartTabs/PrivateInfo/pages/private_info_page.dart';
@@ -103,8 +103,6 @@ class _EmployeeFormPageState extends State<EmployeeFormPage> {
 
   /// Handles back navigation with different behaviors based on context
   Future<void> _handleBackNavigation(BuildContext context) async {
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
-
     if (widget.isOrg == true) {
       Navigator.pop(context);
       return;
@@ -121,14 +119,9 @@ class _EmployeeFormPageState extends State<EmployeeFormPage> {
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
             const CommonAppBar(initialIndex: 1),
-        transitionDuration: motionProvider.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 300),
-        reverseTransitionDuration: motionProvider.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 300),
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          if (motionProvider.reduceMotion) return child;
           return FadeTransition(opacity: animation, child: child);
         },
       ),
@@ -255,7 +248,6 @@ class _EmployeeFormPageState extends State<EmployeeFormPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
 
     return BlocBuilder<EmployeeFormBloc, EmployeeFormState>(
       builder: (context, state) {
@@ -464,18 +456,15 @@ class _EmployeeFormPageState extends State<EmployeeFormPage> {
                                     PageRouteBuilder(
                                       pageBuilder: (_, __, ___) =>
                                           WorkInfoPage(employeeId: id),
-                                      transitionDuration:
-                                          motionProvider.reduceMotion
-                                          ? Duration.zero
-                                          : const Duration(milliseconds: 300),
+                                      transitionDuration: const Duration(
+                                        milliseconds: 300,
+                                      ),
                                       transitionsBuilder:
                                           (_, animation, __, child) =>
-                                              motionProvider.reduceMotion
-                                              ? child
-                                              : FadeTransition(
-                                                  opacity: animation,
-                                                  child: child,
-                                                ),
+                                              FadeTransition(
+                                                opacity: animation,
+                                                child: child,
+                                              ),
                                     ),
                                   );
                                   break;
@@ -486,18 +475,15 @@ class _EmployeeFormPageState extends State<EmployeeFormPage> {
                                     PageRouteBuilder(
                                       pageBuilder: (_, __, ___) =>
                                           PrivateInfoPage(employeeId: id),
-                                      transitionDuration:
-                                          motionProvider.reduceMotion
-                                          ? Duration.zero
-                                          : const Duration(milliseconds: 300),
+                                      transitionDuration: const Duration(
+                                        milliseconds: 300,
+                                      ),
                                       transitionsBuilder:
                                           (_, animation, __, child) =>
-                                              motionProvider.reduceMotion
-                                              ? child
-                                              : FadeTransition(
-                                                  opacity: animation,
-                                                  child: child,
-                                                ),
+                                              FadeTransition(
+                                                opacity: animation,
+                                                child: child,
+                                              ),
                                     ),
                                   );
                                   break;
@@ -514,6 +500,7 @@ class _EmployeeFormPageState extends State<EmployeeFormPage> {
             ),
             body: BlocConsumer<EmployeeFormBloc, EmployeeFormState>(
               listener: (context, state) {
+
                 if (state.errorMessage != null) {
                   CustomSnackbar.showError(context, state.errorMessage!);
                   context.read<EmployeeFormBloc>().emit(
@@ -532,6 +519,10 @@ class _EmployeeFormPageState extends State<EmployeeFormPage> {
                   context.read<EmployeeFormBloc>().emit(
                     state.copyWith(clearMessage: true),
                   );
+                  ReviewService().trackSignificantEvent();
+                  Future.delayed(const Duration(seconds: 3), () {
+                    ReviewService().checkAndShowRating(context);
+                  });
                 }
               },
 

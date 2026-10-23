@@ -262,9 +262,19 @@ class EmployeeListService {
       }
     }
 
-    final isHrManager = await hasGroup('hr.group_hr_manager');
-    final isHrUser = await hasGroup('hr.group_hr_user');
-    final isAdmin = await hasGroup('base.group_system');
+    // `has_group` is deprecated/changed in newer Odoo (19+/20), and a failure
+    // here must not hide employee images; treat errors as "unknown".
+    Future<bool> safeHasGroup(String ext) async {
+      try {
+        return await hasGroup(ext);
+      } catch (_) {
+        return false;
+      }
+    }
+
+    final isHrManager = await safeHasGroup('hr.group_hr_manager');
+    final isHrUser = await safeHasGroup('hr.group_hr_user');
+    final isAdmin = await safeHasGroup('base.group_system');
 
     return isHrUser || isHrManager || isAdmin;
   }
@@ -283,88 +293,131 @@ class EmployeeListService {
     List<int>? employeeIds,
     bool? preApplied,
   }) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      int userId = prefs.getInt('userId') ?? 0;
+    final prefs = await SharedPreferences.getInstance();
+    int userId = prefs.getInt('userId') ?? 0;
 
-      final offset = page * itemsPerPage;
-      final List domain = [];
-      domain.addAll([
-        ['active', '=', active],
-      ]);
-      if (preApplied == true) {
-        domain.add(['id', 'in', employeeIds]);
-      }
-      if (newlyHired == true) {
-        domain.add(['newly_hired', '=', newlyHired]);
-      }
-      List orConditions = [];
+    final offset = page * itemsPerPage;
+    final List domain = [];
+    domain.addAll([
+      ['active', '=', active],
+    ]);
+    if (preApplied == true) {
+      domain.add(['id', 'in', employeeIds]);
+    }
+    if (newlyHired == true) {
+      domain.add(['newly_hired', '=', newlyHired]);
+    }
+    List orConditions = [];
 
-      if (myTeam == true) {
-        final currentEmployeeId = await CompanySessionManager.callKwWithCompany(
-          {
-            'model': 'hr.employee',
-            'method': 'search_read',
-            'args': [
-              [
-                ['user_id', '=', userId],
-              ],
+    if (myTeam == true) {
+      final currentEmployeeId = await CompanySessionManager.callKwWithCompany(
+        {
+          'model': 'hr.employee',
+          'method': 'search_read',
+          'args': [
+            [
+              ['user_id', '=', userId],
             ],
-            'kwargs': {
-              'fields': ['id'],
-            },
+          ],
+          'kwargs': {
+            'fields': ['id'],
           },
-        );
-        if (currentEmployeeId != null && currentEmployeeId.isNotEmpty) {
-          final empId = currentEmployeeId[0]['id'];
-          orConditions.add(['parent_id', '=', empId]);
-        }
+        },
+      );
+      if (currentEmployeeId != null && currentEmployeeId.isNotEmpty) {
+        final empId = currentEmployeeId[0]['id'];
+        orConditions.add(['parent_id', '=', empId]);
       }
-      if (myDepartment == true) {
-        orConditions.add(['member_of_department', '=', true]);
-      }
+    }
+    if (myDepartment == true) {
+      orConditions.add(['member_of_department', '=', true]);
+    }
 
-      if (orConditions.length == 1) {
-        domain.add(orConditions.first);
-      } else if (orConditions.length == 2) {
-        domain.add('|');
-        domain.add(orConditions[0]);
-        domain.add(orConditions[1]);
-      }
-      if (searchQuery != null && searchQuery.isNotEmpty) {
-        domain.add(['name', 'ilike', searchQuery]);
-      }
+    if (orConditions.length == 1) {
+      domain.add(orConditions.first);
+    } else if (orConditions.length == 2) {
+      domain.add('|');
+      domain.add(orConditions[0]);
+      domain.add(orConditions[1]);
+    }
+    if (searchQuery != null && searchQuery.isNotEmpty) {
+      domain.add(['name', 'ilike', searchQuery]);
+    }
 
-      final canSeeImage = await userCanSeeEmployeeImage();
-      final safeFields = [
-        'id',
-        'name',
-        'work_email',
-        'work_phone',
-        'parent_id',
-        'department_id',
-        'job_id',
-        'create_date',
-      ];
-      if (canSeeImage) {
-        safeFields.addAll(['image_1920', 'skill_ids', 'category_ids']);
-      }
+    final canSeeImage = await userCanSeeEmployeeImage();
+    // `image_128` is readable by any user who can read the employee and is
+    // far lighter than `image_1920` for list thumbnails.
+    final baseFields = [
+      'id',
+      'name',
+      'work_email',
+      'work_phone',
+      'parent_id',
+      'department_id',
+      'job_id',
+      'create_date',
+      'image_128',
+      'avatar_128',
+    ];
+    final extendedFields = [
+      ...baseFields,
+      'skill_ids',
+      'category_ids',
+    ];
 
-      final employeeItems = await CompanySessionManager.callKwWithCompany({
+    Future<dynamic> runSearchRead(List<String> fields) {
+      return CompanySessionManager.callKwWithCompany({
         'model': 'hr.employee',
         'method': 'search_read',
         'args': [domain],
         'kwargs': {
-          'fields': safeFields,
+          'fields': fields,
           'limit': itemsPerPage,
           'offset': offset,
         },
       });
-
-      return List<Map<String, dynamic>>.from(employeeItems ?? []);
-    } catch (e) {
-      return [];
     }
+
+    final minimalFields = [
+      'id',
+      'name',
+      'work_email',
+      'work_phone',
+      'parent_id',
+      'department_id',
+      'job_id',
+      'create_date',
+    ];
+
+    // Try progressively smaller field sets so an unsupported optional field
+    // (skills module, avatar_128, image access) never loses the whole list.
+    final attempts = [
+      if (canSeeImage) extendedFields,
+      baseFields,
+      minimalFields,
+    ];
+    Object? lastError;
+    for (final fields in attempts) {
+      try {
+        final employeeItems = await runSearchRead(fields);
+        final list = List<Map<String, dynamic>>.from(employeeItems ?? []);
+        // Odoo 20 returns binary fields as {'content': <base64>, 'size': n}
+        // instead of a plain base64 string; flatten them.
+        for (final emp in list) {
+          for (final key in const ['image_128', 'image_1920', 'avatar_128']) {
+            final v = emp[key];
+            if (v is Map) {
+              final content = v['content'];
+              emp[key] = content is String ? content : false;
+            }
+          }
+        }
+        return list;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError!;
   }
 
   /// Enriches employee list with human-readable skill names.

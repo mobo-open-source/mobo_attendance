@@ -9,7 +9,9 @@ import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:mobo_attendance/Profile/configuration/pages/SwitchAccount/switch_credentials_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../LoginPages/login/models/session_model.dart';
 import '../../../../LoginPages/login/services/network_service.dart';
+import '../../../../MainScreens/AppBars/pages/common_app_bar.dart';
 
 /// First step of multi-account setup: enter Odoo server URL and select database.
 ///
@@ -23,11 +25,13 @@ import '../../../../LoginPages/login/services/network_service.dart';
 class ServerUrlScreen extends StatefulWidget {
   final String serverUrl;
   final String database;
+  final SessionModel session;
 
   const ServerUrlScreen({
     super.key,
     required this.serverUrl,
     required this.database,
+    required this.session,
   });
 
   @override
@@ -36,6 +40,7 @@ class ServerUrlScreen extends StatefulWidget {
 
 class _ServerUrlScreenState extends State<ServerUrlScreen> {
   final TextEditingController _urlController = TextEditingController();
+  final FocusNode _urlFocusNode = FocusNode();
   String _url = '';
   List<String> _urlSuggestions = [];
   Map<String, Map<String, String>> _urlHistory = {};
@@ -66,6 +71,7 @@ class _ServerUrlScreenState extends State<ServerUrlScreen> {
   @override
   void dispose() {
     _manualDbController.dispose();
+    _urlFocusNode.dispose();
     _debounce?.cancel();
     super.dispose();
   }
@@ -254,8 +260,9 @@ class _ServerUrlScreenState extends State<ServerUrlScreen> {
           );
           if (dbList.isNotEmpty) {
             setState(() {
-              _databases = dbList;
+              _databases = dbList.toSet().toList();
               _workingProtocol = protocol;
+              selectedProtocol = protocol;
               _errorMessage = null;
               if (dbList.length == 1) {
                 _selectedDatabase = dbList.first;
@@ -267,6 +274,7 @@ class _ServerUrlScreenState extends State<ServerUrlScreen> {
             // Empty list but connection worked → manual input
             setState(() {
               _workingProtocol = protocol;
+              selectedProtocol = protocol;
               _databases = [];
               _showManualDbInput = true;
               _errorMessage = null;
@@ -279,6 +287,7 @@ class _ServerUrlScreenState extends State<ServerUrlScreen> {
           if (error is Map && error.containsKey('data')) {
             setState(() {
               _workingProtocol = protocol;
+              selectedProtocol = protocol;
               _databases = [];
               _showManualDbInput = true;
               _errorMessage = null;
@@ -353,230 +362,273 @@ class _ServerUrlScreenState extends State<ServerUrlScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Background image with dark/light overlay
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDark ? Colors.grey[950] : Colors.grey[50],
-                image: DecorationImage(
-                  image: const AssetImage("assets/background.png"),
-                  fit: BoxFit.cover,
-                  colorFilter: ColorFilter.mode(
-                    isDark
-                        ? Colors.black.withOpacity(1)
-                        : Colors.white.withOpacity(1),
-                    BlendMode.dstATop,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // Logo + app name at top
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 40),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.asset(
-                    'assets/attendance-icon.png',
-                    fit: BoxFit.fitWidth,
-                    height: 30,
-                    width: 30,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        HugeIcons.strokeRoundedTask01,
-                        color: Color(0xFFC03355),
-                        size: 20,
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'mobo attendance',
-                    style: TextStyle(
-                      fontFamily: 'Yaro',
-                      fontWeight: FontWeight.w400,
-                      color: Colors.white,
-                      fontSize: 24,
+    return WillPopScope(
+      onWillPop: () async {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => CommonAppBar()),
+        );
+        return false;
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // Background image with dark/light overlay
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey[950] : Colors.grey[50],
+                  image: DecorationImage(
+                    image: const AssetImage("assets/background.png"),
+                    fit: BoxFit.cover,
+                    colorFilter: ColorFilter.mode(
+                      isDark
+                          ? Colors.black.withOpacity(1)
+                          : Colors.white.withOpacity(1),
+                      BlendMode.dstATop,
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-
-          // Main form content
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 20),
-                      const SizedBox(height: 45),
-                      Align(
-                        alignment: Alignment.center,
-                        child: Text(
-                          "Add Account",
-                          style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                            fontSize: 25,
-                          ),
-                        ),
+            Positioned(
+              top: 0,
+              left: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _isLoading
+                        ? null
+                        : () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => CommonAppBar(),
+                              ),
+                            );
+                          },
+                    borderRadius: BorderRadius.circular(32),
+                    child: Container(
+                      height: 64,
+                      width: 64,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        HugeIcons.strokeRoundedArrowLeft01,
+                        color: _isLoading ? Colors.white54 : Colors.white,
+                        size: 24,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Enter your server details to continue',
-                        style: GoogleFonts.manrope(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-                      _UrlInputField(
-                        controller: _urlController,
-                        protocol: selectedProtocol,
-                        url: _url,
-                        isLoading: _isLoading,
-                        urlSuggestions: _urlSuggestions,
-                        urlHistory: _urlHistory,
-                        hideHistorySuggestions: _hideHistorySuggestions,
-                        onUrlChanged: _handleUrlChanged,
-                        onProtocolChanged: (value) {
-                          if (value == null) return;
-                          setState(() => selectedProtocol = value);
-                          if (_url.isNotEmpty) _handleUrlChanged(_url);
-                        },
-                        onDatabaseSelected: (db) {
-                          setState(() => _selectedDatabase = db);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      if (_showManualDbInput) _buildManualDbInput(),
-                      if (!_showManualDbInput && _databases.isNotEmpty)
-                        _DatabaseDropdown(
-                          databases: _databases,
-                          selectedDatabase: _selectedDatabase,
-                          onDatabaseChanged: (db) =>
-                              setState(() => _selectedDatabase = db),
-                        ),
-                      if (showError) ...[
-                        if (_errorMessage != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Text(
-                              _errorMessage!,
-                              style: GoogleFonts.manrope(color: Colors.white),
-                            ),
-                          ),
-                      ],
-                      const SizedBox(height: 30),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          onPressed:
-                              ((_databases.isEmpty && !_showManualDbInput) ||
-                                  (_showManualDbInput &&
-                                      _manualDbController.text.isEmpty) ||
-                                  (!_showManualDbInput &&
-                                      _selectedDatabase == null))
-                              ? null
-                              : () {
-                                  setState(() {
-                                    showError = true;
-                                  });
-                                  var url = _url.trim();
-                                  url = url.replaceFirst(
-                                    RegExp(r'^https?://'),
-                                    '',
-                                  );
-                                  String finalDb = _showManualDbInput
-                                      ? _manualDbController.text.trim()
-                                      : _selectedDatabase!;
-                                  if (finalDb.isEmpty) {
-                                    setState(
-                                      () => _errorMessage =
-                                          "Database name is required",
-                                    );
-                                    return;
-                                  }
-                                  if (_urlHistory.containsKey(url)) {
-                                    final entry = _urlHistory[url]!;
-
-                                    if (!_showManualDbInput &&
-                                        (_selectedDatabase == null ||
-                                            _selectedDatabase!.isEmpty)) {
-                                      finalDb = entry['db'] ?? "";
-                                    }
-                                  }
-
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => SwitchCredentialsScreen(
-                                        serverUrl: url,
-                                        database: finalDb,
-                                        protocol:
-                                            _workingProtocol ??
-                                            selectedProtocol,
-                                        urlInput: _url,
-                                      ),
-                                    ),
-                                  );
-                                },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: _isLoading
-                              ? Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Checking',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    LoadingAnimationWidget.staggeredDotsWave(
-                                      color: Colors.white,
-                                      size: 28,
-                                    ),
-                                  ],
-                                )
-                              : const Text(
-                                  'Next',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+            // Logo + app name at top
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 40),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      'assets/attendance-icon.png',
+                      fit: BoxFit.fitWidth,
+                      height: 30,
+                      width: 30,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          HugeIcons.strokeRoundedTask01,
+                          color: Color(0xFFC03355),
+                          size: 20,
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'mobo attendance',
+                      style: TextStyle(
+                        fontFamily: 'Yaro',
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white,
+                        fontSize: 24,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Main form content
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 20),
+                        const SizedBox(height: 45),
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text(
+                            "Add Account",
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              fontSize: 25,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Enter your server details to continue',
+                          style: GoogleFonts.manrope(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+                        _UrlInputField(
+                          controller: _urlController,
+                          fieldFocusNode: _urlFocusNode,
+                          protocol: selectedProtocol,
+                          url: _url,
+                          isLoading: _isLoading,
+                          urlSuggestions: _urlSuggestions,
+                          urlHistory: _urlHistory,
+                          hideHistorySuggestions: _hideHistorySuggestions,
+                          onUrlChanged: _handleUrlChanged,
+                          onProtocolChanged: (value) {
+                            if (value == null) return;
+                            setState(() => selectedProtocol = value);
+                            if (_url.isNotEmpty) _handleUrlChanged(_url);
+                          },
+                          onDatabaseSelected: (db) {
+                            setState(() => _selectedDatabase = db);
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        if (_showManualDbInput) _buildManualDbInput(),
+                        if (!_showManualDbInput && _databases.isNotEmpty)
+                          _DatabaseDropdown(
+                            databases: _databases,
+                            selectedDatabase: _selectedDatabase,
+                            onDatabaseChanged: (db) =>
+                                setState(() => _selectedDatabase = db),
+                          ),
+                        if (showError) ...[
+                          if (_errorMessage != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Text(
+                                _errorMessage!,
+                                style: GoogleFonts.manrope(color: Colors.white),
+                              ),
+                            ),
+                        ],
+                        const SizedBox(height: 30),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton(
+                            onPressed:
+                                ((_databases.isEmpty && !_showManualDbInput) ||
+                                    (_showManualDbInput &&
+                                        _manualDbController.text.isEmpty) ||
+                                    (!_showManualDbInput &&
+                                        _selectedDatabase == null))
+                                ? null
+                                : () async {
+                                    setState(() {
+                                      showError = true;
+                                    });
+                                    var url = _url.trim();
+                                    url = url.replaceFirst(
+                                      RegExp(r'^https?://'),
+                                      '',
+                                    );
+                                    String finalDb = _showManualDbInput
+                                        ? _manualDbController.text.trim()
+                                        : _selectedDatabase!;
+                                    if (finalDb.isEmpty) {
+                                      setState(
+                                        () => _errorMessage =
+                                            "Database name is required",
+                                      );
+                                      return;
+                                    }
+                                    if (_urlHistory.containsKey(url)) {
+                                      final entry = _urlHistory[url]!;
+
+                                      if (!_showManualDbInput &&
+                                          (_selectedDatabase == null ||
+                                              _selectedDatabase!.isEmpty)) {
+                                        finalDb = entry['db'] ?? "";
+                                      }
+                                    }
+
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => SwitchCredentialsScreen(
+                                          serverUrl: url,
+                                          database: finalDb,
+                                          protocol:
+                                              _workingProtocol ??
+                                              selectedProtocol,
+                                          urlInput: _url,
+                                          session: widget.session,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: _isLoading
+                                ? Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        'Checking',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      LoadingAnimationWidget.staggeredDotsWave(
+                                        color: Colors.white,
+                                        size: 28,
+                                      ),
+                                    ],
+                                  )
+                                : const Text(
+                                    'Next',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -632,6 +684,7 @@ class _ServerUrlScreenState extends State<ServerUrlScreen> {
 /// - Debounced change handling
 class _UrlInputField extends StatelessWidget {
   final TextEditingController controller;
+  final FocusNode fieldFocusNode;
   final String protocol;
   final String url;
   final bool isLoading;
@@ -644,6 +697,7 @@ class _UrlInputField extends StatelessWidget {
 
   const _UrlInputField({
     required this.controller,
+    required this.fieldFocusNode,
     required this.protocol,
     required this.url,
     required this.isLoading,
@@ -658,14 +712,31 @@ class _UrlInputField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final validProtocols = ['http://', 'https://'];
+    String stripProtocol(String value) => value.replaceFirst(
+      RegExp(r'^https?://', caseSensitive: false),
+      '',
+    );
+
     return RawAutocomplete<String>(
+      // Without this, RawAutocomplete creates its own internal controller
+      // instead of listening to the one actually bound to the visible
+      // field below, so it never sees what the user types and options
+      // never populate. RawAutocomplete requires focusNode and
+      // textEditingController to be supplied together.
+      textEditingController: controller,
+      focusNode: fieldFocusNode,
+      displayStringForOption: stripProtocol,
       optionsBuilder: (value) {
         if (hideHistorySuggestions) return const Iterable<String>.empty();
 
         final input = value.text.trim().toLowerCase();
-        if (input.isEmpty) return const Iterable<String>.empty();
-
-        return urlSuggestions.where((u) => u.toLowerCase().contains(input));
+        if (input.isEmpty) return urlSuggestions;
+        if (urlSuggestions.any((u) => stripProtocol(u).toLowerCase() == input)) {
+          return const Iterable<String>.empty();
+        }
+        return urlSuggestions.where(
+          (u) => stripProtocol(u).toLowerCase().contains(input),
+        );
       },
 
       onSelected: (selection) {
@@ -674,6 +745,7 @@ class _UrlInputField extends StatelessWidget {
         if (entry != null && entry['db']?.isNotEmpty == true) {
           onDatabaseSelected(entry['db']!);
         }
+        FocusScope.of(context).unfocus();
       },
 
       fieldViewBuilder: (context, ctrl, focusNode, onSubmitted) {
@@ -686,7 +758,16 @@ class _UrlInputField extends StatelessWidget {
             }
             return null;
           },
-          onChanged: onUrlChanged,
+          onChanged: (v) {
+            onUrlChanged(v);
+            final trimmed = v.trim().toLowerCase();
+            if (trimmed.isNotEmpty &&
+                urlSuggestions.any(
+                  (u) => stripProtocol(u).toLowerCase() == trimmed,
+                )) {
+              focusNode.unfocus();
+            }
+          },
           style: GoogleFonts.manrope(
             color: Colors.black,
             fontSize: 14,
@@ -854,9 +935,10 @@ class _DatabaseDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (databases.isEmpty) return const SizedBox.shrink();
+    final uniqueDatabases = databases.toSet().toList();
 
     return DropdownButtonFormField2<String>(
-      value: selectedDatabase,
+      value: uniqueDatabases.contains(selectedDatabase) ? selectedDatabase : null,
       isExpanded: true,
       hint: Align(
         alignment: Alignment.centerLeft,
@@ -869,7 +951,7 @@ class _DatabaseDropdown extends StatelessWidget {
           ),
         ),
       ),
-      items: databases
+      items: uniqueDatabases
           .map(
             (db) => DropdownMenuItem(
               value: db,

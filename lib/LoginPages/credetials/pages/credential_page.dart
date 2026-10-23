@@ -10,7 +10,6 @@ import '../../../CommonWidgets/core/company/services/company_session_service_imp
 import '../../../CommonWidgets/core/company/session/company_session_manager.dart';
 import '../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../CommonWidgets/core/providers/language_provider.dart';
-import '../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../CommonWidgets/core/security/secure_storage_service.dart';
 import '../../../CommonWidgets/globals.dart';
 import '../../../MainScreens/AppBars/pages/common_app_bar.dart';
@@ -107,7 +106,6 @@ class CredentialsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
 
     return BlocProvider(
       create: (context) => CredentialsBloc(
@@ -206,7 +204,6 @@ class CredentialsPage extends StatelessWidget {
                               protocol: protocol,
                               url: url,
                               database: database,
-                              motionProvider: motionProvider,
                             ),
                           ),
                         ),
@@ -232,13 +229,11 @@ class _LoginForm extends StatefulWidget {
   final String protocol;
   final String url;
   final String database;
-  final MotionProvider motionProvider;
 
   const _LoginForm({
     required this.protocol,
     required this.url,
     required this.database,
-    required this.motionProvider,
   });
 
   @override
@@ -390,9 +385,7 @@ class _LoginFormState extends State<_LoginForm> {
                       context,
                       PageRouteBuilder(
                         pageBuilder: (_, __, ___) => const CommonAppBar(),
-                        transitionDuration: widget.motionProvider.reduceMotion
-                            ? Duration.zero
-                            : const Duration(milliseconds: 300),
+                        transitionDuration: const Duration(milliseconds: 300),
                         transitionsBuilder: (_, animation, __, child) =>
                             FadeTransition(opacity: animation, child: child),
                       ), (route) => false,

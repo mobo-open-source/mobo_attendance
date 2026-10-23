@@ -1,3 +1,4 @@
+import '../../../../CommonWidgets/shared/utils/odoo_binary.dart';
 import 'package:odoo_rpc/odoo_rpc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -65,7 +66,7 @@ class AttendanceFormService {
               employeeData is List &&
               employeeData.isNotEmpty) {
             final emp = employeeData[0] as Map<String, dynamic>;
-            attendanceList[0]['employee_image'] = emp['image_1920'];
+            attendanceList[0]['employee_image'] = unwrapOdooBinary(emp['image_1920']);
             attendanceList[0]['job'] = emp['job_id'] is List
                 ? emp['job_id'][1]
                 : null;
@@ -232,7 +233,9 @@ class AttendanceFormService {
         },
       });
 
-      final employeeList = List<Map<String, dynamic>>.from(employeeItems ?? []);
+      final employeeList = unwrapOdooBinaries(
+        List<Map<String, dynamic>>.from(employeeItems ?? []),
+      );
       return employeeList;
     } catch (e) {
       return [];
@@ -261,7 +264,9 @@ class AttendanceFormService {
         'kwargs': {'fields': safeFields},
       });
 
-      final employeeDetails = List<Map<String, dynamic>>.from(result ?? []);
+      final employeeDetails = unwrapOdooBinaries(
+        List<Map<String, dynamic>>.from(result ?? []),
+      );
       return employeeDetails;
     } catch (e) {
       return [];

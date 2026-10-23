@@ -400,7 +400,14 @@ class WorkInfoService {
     });
 
     if (employeeDetails.isEmpty) return null;
-    return employeeDetails[0];
+    final emp = employeeDetails[0];
+    // Odoo 20 returns binary fields as {'content': <base64>, ...}
+    final image = emp['image_1920'];
+    if (image is Map) {
+      final content = image['content'];
+      emp['image_1920'] = content is String ? content : false;
+    }
+    return emp;
   }
 
   /// Recursively fetches the parent chain (manager hierarchy) for organization chart.

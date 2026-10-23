@@ -11,9 +11,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
-import '../../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../../CommonWidgets/globals.dart';
 import '../../../../CommonWidgets/shared/widgets/snackbar.dart';
+import '../../../../Rating/review_service.dart';
 import '../../../AppBars/pages/common_app_bar.dart';
 import '../../../Employees/EmployeeForm/Form/widgets/shimmer_employee_details.dart';
 import '../../AttendanceList/bloc/attendance_list_bloc.dart';
@@ -269,6 +269,10 @@ class _AttendanceFormPageState extends State<AttendanceFormPage> {
             } else if (state is AttendanceFormLoaded &&
                 state.successMessage != null) {
               CustomSnackbar.showSuccess(context, state.successMessage!);
+              ReviewService().trackSignificantEvent();
+              Future.delayed(const Duration(seconds: 3), () {
+                ReviewService().checkAndShowRating(context);
+              });
             }
           },
           builder: (context, state) {
@@ -1212,7 +1216,6 @@ class _AttendanceFormPageState extends State<AttendanceFormPage> {
 
   /// Handles back navigation and triggers reloading of attendance list.
   void _handleBackNavigation(BuildContext context) {
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
     final listBloc = context.read<AttendanceListBloc>();
     listBloc.add(const LoadAttendance(page: 0));
 
@@ -1221,14 +1224,9 @@ class _AttendanceFormPageState extends State<AttendanceFormPage> {
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
             const CommonAppBar(initialIndex: 2),
-        transitionDuration: motionProvider.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 300),
-        reverseTransitionDuration: motionProvider.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 300),
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          if (motionProvider.reduceMotion) return child;
           return FadeTransition(opacity: animation, child: child);
         },
       ),

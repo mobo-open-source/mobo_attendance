@@ -98,6 +98,21 @@ class EmployeeListBloc extends Bloc<EmployeeListEvent, EmployeeListState> {
     } on SocketException catch (_) {
       emit(state.copyWith(isLoading: false, catchError: false, connectionError: true));
     } catch (e) {
+      // The account is missing the Odoo HR access rights (e.g. a newly
+      // created user not yet assigned to the "Officer"/"User" role), so
+      // reading employee data raises an AccessError. Surface this
+      // distinctly instead of the generic error state.
+      if (e.toString().contains('AccessError')) {
+        emit(
+          state.copyWith(
+            isLoading: false,
+            catchError: false,
+            connectionError: false,
+            permissionError: true,
+          ),
+        );
+        return;
+      }
       emit(state.copyWith(isLoading: false, catchError: true, connectionError: false));
     }
   }
@@ -118,6 +133,7 @@ class EmployeeListBloc extends Bloc<EmployeeListEvent, EmployeeListState> {
         errorMessage: null,
         catchError: false,
         connectionError: false,
+        permissionError: false,
       ),
     );
     final archived = state.selectedFilters.contains("archived");
@@ -193,6 +209,7 @@ class EmployeeListBloc extends Bloc<EmployeeListEvent, EmployeeListState> {
           accessForAction: access,
           catchError: false,
           connectionError: false,
+          permissionError: false,
         ),
       );
     } on SocketException catch (_) {
@@ -206,10 +223,32 @@ class EmployeeListBloc extends Bloc<EmployeeListEvent, EmployeeListState> {
           warningMessage: null,
           catchError: false,
           connectionError: true,
+          permissionError: false,
           errorMessage: null,
         ),
       );
     } catch (e) {
+      // The account is missing the Odoo HR access rights (e.g. a newly
+      // created user not yet assigned to the "Officer"/"User" role), so
+      // reading employee data raises an AccessError. Surface this
+      // distinctly instead of the generic error state.
+      if (e.toString().contains('AccessError')) {
+        emit(
+          state.copyWith(
+            employees: [],
+            groupedEmployees: [],
+            pageLoading: false,
+            filterLoading: false,
+            isLoading: false,
+            warningMessage: null,
+            catchError: false,
+            connectionError: false,
+            permissionError: true,
+            errorMessage: null,
+          ),
+        );
+        return;
+      }
       emit(
         state.copyWith(
           employees: [],
@@ -220,6 +259,7 @@ class EmployeeListBloc extends Bloc<EmployeeListEvent, EmployeeListState> {
           warningMessage: null,
           catchError: true,
           connectionError: false,
+          permissionError: false,
           errorMessage: null,
         ),
       );

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+5
+version: 1.0.4+10
 
 environment:
   sdk: ^3.9.2
@@ -50,6 +50,8 @@ dependencies:
   dots_indicator: ^4.0.1
   dropdown_search: ^5.0.6
   image_picker: ^1.2.1
+  mobile_scanner: ^6.0.7
+  face_detection_tflite: ^6.6.3
   shimmer: ^3.0.0
   flutter_switch: ^0.3.2
   url_launcher: ^6.3.2
@@ -99,6 +101,11 @@ flutter_launcher_icons:
 
 # The following section is specific to Flutter packages.
 flutter:
+
+  # Several plugins (mobile_scanner, google_mlkit_*, flutter_inappwebview,
+  # geocoding) are CocoaPods-only, so keep SPM integration off.
+  config:
+    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

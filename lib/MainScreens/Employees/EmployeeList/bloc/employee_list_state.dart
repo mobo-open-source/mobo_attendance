@@ -35,6 +35,7 @@ class EmployeeListState {
   final String? warningMessage;
   final bool catchError;
   final bool connectionError;
+  final bool permissionError;
 
   EmployeeListState({
     this.isLoading = true,
@@ -57,6 +58,7 @@ class EmployeeListState {
     this.warningMessage,
     this.catchError = false,
     this.connectionError = false,
+    this.permissionError = false,
   });
 
   /// Creates a new state instance with updated values.
@@ -84,6 +86,7 @@ class EmployeeListState {
     String? warningMessage,
     bool? catchError,
     bool? connectionError,
+    bool? permissionError,
   }) {
     return EmployeeListState(
       isLoading: isLoading ?? this.isLoading,
@@ -107,6 +110,7 @@ class EmployeeListState {
       warningMessage: warningMessage ?? this.warningMessage,
       catchError: catchError ?? this.catchError,
       connectionError: connectionError ?? this.connectionError,
+      permissionError: permissionError ?? this.permissionError,
     );
   }
 }

@@ -19,10 +19,39 @@ abstract class AttendanceDashboardEvent extends Equatable {
 class LoadDashboardData extends AttendanceDashboardEvent {}
 
 /// Event indicating the user wants to perform a check-in action.
-class CheckInRequested extends AttendanceDashboardEvent {}
+///
+/// [qrValue] is the scanned badge code (for [AttendanceMethod.qr]) and
+/// [selfieBytes] the captured photo (for [AttendanceMethod.selfie]).
+class CheckInRequested extends AttendanceDashboardEvent {
+  final AttendanceMethod method;
+  final String? qrValue;
+  final Uint8List? selfieBytes;
+
+  CheckInRequested({
+    this.method = AttendanceMethod.gps,
+    this.qrValue,
+    this.selfieBytes,
+  });
+
+  @override
+  List<Object?> get props => [method, qrValue, selfieBytes];
+}
 
 /// Event indicating the user wants to perform a check-out action.
-class CheckOutRequested extends AttendanceDashboardEvent {}
+class CheckOutRequested extends AttendanceDashboardEvent {
+  final AttendanceMethod method;
+  final String? qrValue;
+  final Uint8List? selfieBytes;
+
+  CheckOutRequested({
+    this.method = AttendanceMethod.gps,
+    this.qrValue,
+    this.selfieBytes,
+  });
+
+  @override
+  List<Object?> get props => [method, qrValue, selfieBytes];
+}
 
 /// Lightweight event to trigger a full dashboard refresh without additional context.
 ///

@@ -233,6 +233,14 @@ class CompanySessionManager {
 
     if (sessionModel == null) return false;
 
+    /// Block access to expired databases.
+    if (await authService.isDatabaseExpired(
+      normalizedUrl,
+      sessionModel.sessionId,
+    )) {
+      throw const DatabaseExpiredException();
+    }
+
     /// Persist session & login state.
     final storage = StorageService();
     await storage.saveSession(sessionModel);
@@ -506,12 +514,20 @@ class CompanySessionManager {
     if (selectedCompany != null) {
       ctx['company_id'] = selectedCompany;
 
-      List<int> finalAllowed = [...(allowed ?? [])];
-      if (!finalAllowed.contains(selectedCompany)) {
-        finalAllowed.add(selectedCompany);
+      // `selectedCompany` must be the FIRST id in `allowed_company_ids`:
+      // Odoo derives `env.company` (the active company used by
+      // company-dependent computed fields, e.g. `res.users.employee_id` via
+      // `_compute_company_employee`) from `allowed_company_ids[0]`, not from
+      // the `company_id` context key alone. Just appending it when missing
+      // (the previous behavior) could leave some other company first if the
+      // stored `allowed` list didn't already start with it — silently
+      // resolving company-dependent fields against the wrong company.
+      final finalAllowed = <int>[selectedCompany];
+      for (final id in allowed) {
+        if (id != selectedCompany) finalAllowed.add(id);
       }
 
-      ctx['allowed_company_ids'] = <int>{...finalAllowed}.toList();
+      ctx['allowed_company_ids'] = finalAllowed;
     }
 
     kwargs['context'] = ctx;

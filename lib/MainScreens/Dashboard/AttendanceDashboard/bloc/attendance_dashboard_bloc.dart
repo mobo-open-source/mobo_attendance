@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../CommonWidgets/core/company/infrastructure/company_refresh_bus.dart';
+import '../../../../CommonWidgets/core/face/face_match_service.dart';
 import '../../../../LoginPages/credetials/services/app_install_check.dart';
 import '../services/attendance_dashboard_service.dart';
 
@@ -48,6 +49,15 @@ class AttendanceDashboardBloc
     });
   }
 
+  Uint8List? decodeOdooImage(dynamic value) {
+    // Odoo 20 wraps binary fields as {'content': <base64>, ...}
+    if (value is Map) value = value['content'];
+    if (value is String && value.isNotEmpty) {
+      return base64Decode(value);
+    }
+    return null;
+  }
+
   /// Loads all dashboard data including:
   ///   - User profile & image
   ///   - Check-in status & today's attendance record
@@ -60,33 +70,60 @@ class AttendanceDashboardBloc
     Emitter<AttendanceDashboardState> emit,
   ) async {
     emit(
-      state.copyWith(isLoading: true, errorMessage: null, catchError: false, connectionError: false),
+      state.copyWith(
+        isLoading: true,
+        errorMessage: null,
+        catchError: false,
+        connectionError: false,
+        permissionError: false,
+        profileImageBytes: null,
+      ),
     );
     try {
       final prefs = await SharedPreferences.getInstance();
       final userName = prefs.getString('userName') ?? 'User';
 
-      final profileList = await _service.loadProfile();
-      final accessForAdmin = await _service.isAdmin();
+      // Each of these is an independent piece of dashboard data — a single
+      // flaky call (e.g. a transient RPC hiccup) shouldn't take down the
+      // whole dashboard when the rest of the data loaded fine.
+      List<Map<String, dynamic>> profileList = [];
+      try {
+        profileList = await _service.loadProfile();
+      } catch (_) {}
+
+      bool accessForAdmin = false;
+      try {
+        accessForAdmin = await _service.isAdmin();
+      } catch (_) {}
+
       bool isAppNotInstalled = false;
       bool accessForLeaveManager = false;
-      bool success = await AppInstallCheck().checkLeaveModule();
-      if(!success){
-        isAppNotInstalled = true;
-      }else {
-        isAppNotInstalled = false;
-        accessForLeaveManager = await _service.isHrLeaveManager();
+      try {
+        bool success = await AppInstallCheck().checkLeaveModule();
+        if (!success) {
+          isAppNotInstalled = true;
+        } else {
+          isAppNotInstalled = false;
+          accessForLeaveManager = await _service.isHrLeaveManager();
+        }
+      } catch (_) {}
+
+      bool isCheckedIn = false;
+      try {
+        isCheckedIn = await _service.isEmployeeAlreadyCheckedIn();
+      } catch (_) {}
+
+      double monthlyHours = 0.0;
+      try {
+        monthlyHours = await _service.getCurrentMonthWorkedHours();
+      } catch (_) {}
+
+      Uint8List? profileImageBytes;
+
+      if (profileList.isNotEmpty) {
+        profileImageBytes = decodeOdooImage(profileList[0]['image_1920']);
       }
 
-      final isCheckedIn = await _service.isEmployeeAlreadyCheckedIn();
-      final monthlyHours = await _service.getCurrentMonthWorkedHours();
-      Uint8List? profileImageBytes;
-      if (profileList.isNotEmpty && profileList[0]['image_1920'] != null) {
-        final base64Image = profileList[0]['image_1920'];
-        if (base64Image.isNotEmpty) {
-          profileImageBytes = base64Decode(base64Image);
-        }
-      }
       int? staffCount,
           staffPresentCount,
           staffAbsentCount,
@@ -108,15 +145,15 @@ class AttendanceDashboardBloc
 
       // Leave Manager permissions
       if (!accessForAdmin && accessForLeaveManager) {
-        try{
+        try {
           leavePendingCount = await _service.pendingLeaveCount();
           pendingLeaves = await _service.pendingLeaves();
           isAppNotInstalled = false;
-        }catch(e){
+        } catch (e) {
           bool success = await AppInstallCheck().checkLeaveModule();
-          if(!success){
+          if (!success) {
             isAppNotInstalled = true;
-          }else {
+          } else {
             leavePendingCount = 0;
             pendingLeaves = [];
             isAppNotInstalled = false;
@@ -124,45 +161,67 @@ class AttendanceDashboardBloc
         }
       }
 
-      // Admin-only statistics
+      // Admin-only statistics — each stat is independent, so one failing
+      // shouldn't blank out the others.
       if (accessForAdmin) {
-        staffCount = await _service.staffCount();
-        last7DaysAbsenteeismTrend = await _service
-            .getAbsenteeismTrendLast7Days();
+        try {
+          staffCount = await _service.staffCount();
+        } catch (_) {}
 
-        final presentEmployee = await _service.getPresentEmployees();
-        staffPresentCount = presentEmployee['count'];
-        staffPresentIds = List<int>.from(presentEmployee['employeeIds'] ?? []);
+        try {
+          last7DaysAbsenteeismTrend = await _service
+              .getAbsenteeismTrendLast7Days();
+        } catch (_) {}
 
-        final absentEmployee = await _service.getAbsentEmployees(staffPresentIds);
-        staffAbsentCount = absentEmployee['count'];
-        staffAbsentIds = List<int>.from(absentEmployee['employeeIds'] ?? []);
-        try{
-        leavePendingCount = await _service.pendingLeaveCount();
-        pendingLeaves = await _service.pendingLeaves();
-        isAppNotInstalled = false;
-        }catch(e){
+        try {
+          final presentEmployee = await _service.getPresentEmployees();
+          staffPresentCount = presentEmployee['count'];
+          staffPresentIds = List<int>.from(
+            presentEmployee['employeeIds'] ?? [],
+          );
+        } catch (_) {}
 
-          bool success = await AppInstallCheck().checkLeaveModule();
+        try {
+          final absentEmployee = await _service.getAbsentEmployees(
+            staffPresentIds ?? [],
+          );
+          staffAbsentCount = absentEmployee['count'];
+          staffAbsentIds = List<int>.from(absentEmployee['employeeIds'] ?? []);
+        } catch (_) {}
 
-          if(!success){
-            isAppNotInstalled = true;
-          }else {
-            leavePendingCount = 0;
-            pendingLeaves = [];
-            isAppNotInstalled = false;
-          }
+        try {
+          leavePendingCount = await _service.pendingLeaveCount();
+          pendingLeaves = await _service.pendingLeaves();
+          isAppNotInstalled = false;
+        } catch (e) {
+          try {
+            bool success = await AppInstallCheck().checkLeaveModule();
+            if (!success) {
+              isAppNotInstalled = true;
+            } else {
+              leavePendingCount = 0;
+              pendingLeaves = [];
+              isAppNotInstalled = false;
+            }
+          } catch (_) {}
         }
-        attendanceStatus = await _service.getTodayAttendanceStatusCounts();
-        staffOnTimeCount = attendanceStatus?.onTime;
-        staffLateInCount = attendanceStatus?.lateIn;
-        staffEarlyInCount = attendanceStatus?.earlyIn;
 
-        onTimeIds = attendanceStatus?.onTimeIds;
-        lateInIds = attendanceStatus?.lateInIds;
-        earlyInIds = attendanceStatus?.earlyInIds;
+        try {
+          attendanceStatus = await _service.getTodayAttendanceStatusCounts();
+          staffOnTimeCount = attendanceStatus.onTime;
+          staffLateInCount = attendanceStatus.lateIn;
+          staffEarlyInCount = attendanceStatus.earlyIn;
+
+          onTimeIds = attendanceStatus.onTimeIds;
+          lateInIds = attendanceStatus.lateInIds;
+          earlyInIds = attendanceStatus.earlyInIds;
+        } catch (_) {}
       }
-      final record = await _service.checkInDetails();
+
+      dynamic record;
+      try {
+        record = await _service.checkInDetails();
+      } catch (_) {}
 
       String checkInTime = "00:00";
       String lastCheckOutTime = "--:--";
@@ -210,6 +269,7 @@ class AttendanceDashboardBloc
           isLoading: false,
           catchError: false,
           connectionError: false,
+          permissionError: false,
           leaveAction: false,
           isTimerLoading: timerLoading,
           userName: userName,
@@ -222,6 +282,7 @@ class AttendanceDashboardBloc
           recentActivity: recentActivity,
           accessForAdmin: accessForAdmin,
           accessForLeaveManager: accessForLeaveManager,
+          clearStats: true,
           staffCount: staffCount,
           staffPresentCount: staffPresentCount,
           staffAbsentCount: staffAbsentCount,
@@ -230,7 +291,7 @@ class AttendanceDashboardBloc
           staffLateInCount: staffLateInCount,
           staffEarlyInCount: staffEarlyInCount,
           pendingLeaves: pendingLeaves,
-          isAppNotInstalled:isAppNotInstalled,
+          isAppNotInstalled: isAppNotInstalled,
           staffPresentIds: staffPresentIds,
           staffAbsentIds: staffAbsentIds,
           onTimeIds: onTimeIds,
@@ -241,19 +302,32 @@ class AttendanceDashboardBloc
         ),
       );
     } on SocketException catch (_) {
-      emit(state.copyWith(
-        isLoading: false,
-        leaveAction: false,
-        catchError: false,
-        connectionError: true,
-      ));
-    } catch (e) {
       emit(
         state.copyWith(
           isLoading: false,
           leaveAction: false,
-          catchError: true,
+          catchError: false,
+          connectionError: true,
         ),
+      );
+    } catch (e) {
+      // The account is missing the Odoo HR access rights (e.g. a newly
+      // created user not yet assigned to the "Officer"/"User" role), so
+      // reading employee-linked data raises an AccessError. Surface this
+      // distinctly instead of the generic error state.
+      if (e.toString().contains('AccessError')) {
+        emit(
+          state.copyWith(
+            isLoading: false,
+            leaveAction: false,
+            catchError: false,
+            permissionError: true,
+          ),
+        );
+        return;
+      }
+      emit(
+        state.copyWith(isLoading: false, leaveAction: false, catchError: true),
       );
     }
   }
@@ -331,6 +405,15 @@ class AttendanceDashboardBloc
   ) async {
     emit(state.copyWith(isCheckInLoading: true));
     try {
+      final verifyError = await _verifyEvent(
+        event.method,
+        event.qrValue,
+        event.selfieBytes,
+      );
+      if (verifyError != null) {
+        emit(state.copyWith(errorMessage: verifyError));
+        return;
+      }
       final info = await getLocationAndNetworkInfo();
       final nowStr = _normalizeDate(_getCurrentDateTime());
       final data = {
@@ -345,6 +428,9 @@ class AttendanceDashboardBloc
 
       final success = await _service.createAttendanceDetails(data);
       if (success) {
+        if (event.selfieBytes != null) {
+          await _service.attachSelfie(event.selfieBytes!);
+        }
         add(RefreshDashboard());
       } else {
         emit(state.copyWith(errorMessage: "Check-in failed"));
@@ -367,6 +453,15 @@ class AttendanceDashboardBloc
   ) async {
     emit(state.copyWith(isCheckInLoading: true));
     try {
+      final verifyError = await _verifyEvent(
+        event.method,
+        event.qrValue,
+        event.selfieBytes,
+      );
+      if (verifyError != null) {
+        emit(state.copyWith(errorMessage: verifyError));
+        return;
+      }
       final info = await getLocationAndNetworkInfo();
       final data = {
         'check_out': _normalizeDate(_getCurrentDateTime()),
@@ -379,6 +474,9 @@ class AttendanceDashboardBloc
       };
       final success = await _service.writeAttendanceDetails(data);
       if (success) {
+        if (event.selfieBytes != null) {
+          await _service.attachSelfie(event.selfieBytes!);
+        }
         _timer?.cancel();
         _todayCheckInDateTime = null;
         add(RefreshDashboard());
@@ -394,6 +492,31 @@ class AttendanceDashboardBloc
     } finally {
       emit(state.copyWith(isCheckInLoading: false));
     }
+  }
+
+  /// Verifies the chosen method. For selfie, the face must match the
+  /// employee's profile photo; anything else blocks the punch.
+  Future<String?> _verifyEvent(
+    AttendanceMethod method,
+    String? qrValue,
+    Uint8List? selfieBytes,
+  ) async {
+    if (method == AttendanceMethod.selfie) {
+      if (selfieBytes == null) return 'No selfie captured';
+      var profileBytes = state.profileImageBytes;
+      if (profileBytes == null) {
+        final profile = await _service.loadProfile();
+        if (profile.isNotEmpty) {
+          profileBytes = decodeOdooImage(profile[0]['image_1920']);
+        }
+      }
+      final outcome = await FaceMatchService.verify(
+        profileBytes: profileBytes,
+        selfieBytes: selfieBytes,
+      );
+      return FaceMatchService.messageFor(outcome);
+    }
+    return _service.verifyMethod(method, qrValue);
   }
 
   /// Simple refresh trigger — reloads all dashboard data

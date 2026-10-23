@@ -544,6 +544,35 @@ class EmployeeCreateService {
     }
   }
 
+  /// Resolves the Odoo 20+ `hr.employee.type` id for a legacy selection key
+  /// (employee, student, trainee, contractor, freelance). Returns null if none.
+  Future<int?> findEmployeeTypeId(String key) async {
+    const names = {
+      'employee': 'Employee',
+      'student': 'Student',
+      'trainee': 'Intern',
+      'contractor': 'Interim',
+      'freelance': 'Occasional',
+    };
+    try {
+      final res = await CompanySessionManager.callKwWithCompany({
+        'model': 'hr.employee.type',
+        'method': 'search_read',
+        'args': [
+          [
+            ['name', 'ilike', names[key] ?? 'Employee'],
+          ],
+        ],
+        'kwargs': {
+          'fields': ['id'],
+          'limit': 1,
+        },
+      });
+      if (res is List && res.isNotEmpty) return res.first['id'] as int;
+    } catch (_) {}
+    return null;
+  }
+
   /// Main method to create a new employee record (`hr.employee`).
   ///
   /// Steps:

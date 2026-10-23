@@ -524,7 +524,15 @@ class EmployeeFormService {
         'employee_skill_ids',
       ];
       if (canSeeExtraFields) {
-        safeFields.addAll(['image_1920', 'employee_type', 'barcode', 'pin']);
+        final prefs = await SharedPreferences.getInstance();
+        final major = parseMajorVersion(prefs.getString('serverVersion') ?? '0');
+        // Odoo 20 removed `employee_type` (now `employee_type_id`)
+        safeFields.addAll([
+          'image_1920',
+          if (major < 20) 'employee_type',
+          'barcode',
+          'pin',
+        ]);
       }
 
       final employeeDetails = await CompanySessionManager.callKwWithCompany({
@@ -541,6 +549,13 @@ class EmployeeFormService {
         return null;
       }
       final employee = employeeDetails[0];
+
+      // Odoo 20 returns binary fields as {'content': <base64>, ...}
+      final image = employee['image_1920'];
+      if (image is Map) {
+        final content = image['content'];
+        employee['image_1920'] = content is String ? content : false;
+      }
 
       final categorized = await loadResumeLine(employee['resume_line_ids']);
       final skills = await loadSkills(employee['employee_skill_ids']);

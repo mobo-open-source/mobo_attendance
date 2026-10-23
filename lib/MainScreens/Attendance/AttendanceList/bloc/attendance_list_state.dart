@@ -51,6 +51,7 @@ class AttendanceLoaded extends AttendanceListState {
   final bool catchError;
   final bool accessForAction;
   final bool connectionError;
+  final bool permissionError;
 
   const AttendanceLoaded({
     required this.attendance,
@@ -67,6 +68,7 @@ class AttendanceLoaded extends AttendanceListState {
     this.catchError = false,
     this.accessForAction = false,
     this.connectionError = false,
+    this.permissionError = false,
   });
 
   /// Returns the total number of displayed attendance records across all loaded pages.
@@ -98,6 +100,7 @@ class AttendanceLoaded extends AttendanceListState {
     bool? catchError,
     bool? accessForAction,
     bool? connectionError,
+    bool? permissionError,
   }) {
     return AttendanceLoaded(
       attendance: attendance ?? this.attendance,
@@ -114,6 +117,7 @@ class AttendanceLoaded extends AttendanceListState {
       catchError: catchError ?? this.catchError,
       accessForAction: accessForAction ?? this.accessForAction,
       connectionError: connectionError ?? this.connectionError,
+      permissionError: permissionError ?? this.permissionError,
     );
   }
 
@@ -133,6 +137,7 @@ class AttendanceLoaded extends AttendanceListState {
     catchError,
     accessForAction,
     connectionError,
+    permissionError,
   ];
 }
 

@@ -1,3 +1,4 @@
+import '../../../../CommonWidgets/shared/utils/odoo_binary.dart';
 import 'package:odoo_rpc/odoo_rpc.dart';
 
 import '../../../../CommonWidgets/core/company/session/company_session_manager.dart';
@@ -141,7 +142,9 @@ class AttendanceCreateService {
         'kwargs': {},
       });
 
-      final employeeList = List<Map<String, dynamic>>.from(employeeItems ?? []);
+      final employeeList = unwrapOdooBinaries(
+        List<Map<String, dynamic>>.from(employeeItems ?? []),
+      );
       return employeeList;
     } catch (e) {
       return [];
@@ -174,7 +177,9 @@ class AttendanceCreateService {
         },
       });
 
-      final employeeDetails = List<Map<String, dynamic>>.from(result ?? []);
+      final employeeDetails = unwrapOdooBinaries(
+        List<Map<String, dynamic>>.from(result ?? []),
+      );
       return employeeDetails;
     } catch (e) {
       return [];

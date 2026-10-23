@@ -8,10 +8,12 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../CommonWidgets/core/company/session/company_session_manager.dart';
 import '../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../CommonWidgets/core/providers/language_provider.dart';
-import '../../../CommonWidgets/core/providers/motion_provider.dart';
+import '../../../CommonWidgets/core/security/secure_storage_service.dart';
 import '../../../CommonWidgets/globals.dart';
+import '../../../CommonWidgets/shared/widgets/snackbar.dart';
 import '../../../LoginPages/credetials/services/storage_service.dart';
 import '../../../LoginPages/login/bloc/login_bloc.dart';
 import '../../../MainScreens/AppBars/pages/common_app_bar.dart';
@@ -58,12 +60,43 @@ class ConfigurationView extends StatefulWidget {
 
 class ConfigurationViewState extends State<ConfigurationView> {
   bool isSwitching = false;
+  String? _switchingKey;
+  String? currentUrl;
+  String? currentDatabase;
+  int? currentUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStoredAccounts();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadStoredAccounts();
+  }
+
+  /// Loads the list of stored accounts from SharedPreferences.
+  ///
+  /// [currentUserId] is read from local prefs (set at login) rather than the
+  /// live profile fetch, so the "is this the active account?" check below
+  /// still works even when the profile RPC fails (e.g. no network, no HR
+  /// access) — otherwise the active account itself gets misclassified as a
+  /// separate saved account and shows up in "Switch Accounts".
+  Future<void> _loadStoredAccounts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      currentUrl = prefs.getString('url') ?? "";
+      currentDatabase = prefs.getString('database') ?? "";
+      currentUserId = prefs.getInt('userId');
+      setState(() {});
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
     final bloc = context.read<ConfigurationBloc>();
 
     return WillPopScope(
@@ -113,17 +146,13 @@ class ConfigurationViewState extends State<ConfigurationView> {
                                 refreshProfile: () async =>
                                     bloc.add(LoadProfileEvent()),
                               ),
-                          transitionDuration: motionProvider.reduceMotion
-                              ? Duration.zero
-                              : const Duration(milliseconds: 300),
+                          transitionDuration: const Duration(milliseconds: 300),
                           transitionsBuilder:
                               (context, animation, secondary, child) =>
-                                  motionProvider.reduceMotion
-                                  ? child
-                                  : FadeTransition(
-                                      opacity: animation,
-                                      child: child,
-                                    ),
+                                  FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
                         ),
                       );
                     },
@@ -195,8 +224,11 @@ class ConfigurationViewState extends State<ConfigurationView> {
                           : Image.memory(
                               base64Decode(profiles.first.image!),
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  const Icon(Icons.person, size: 50),
+                              errorBuilder: (_, __, ___) => const Icon(
+                                HugeIcons.strokeRoundedUser,
+                                color: Colors.white,
+                                size: 30,
+                              ),
                             )
                     : widget.profileImageBytes != null
                     ? isSvgBytes(widget.profileImageBytes!)
@@ -207,13 +239,16 @@ class ConfigurationViewState extends State<ConfigurationView> {
                           : Image.memory(
                               widget.profileImageBytes!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  const Icon(Icons.person, size: 50),
+                              errorBuilder: (_, __, ___) => const Icon(
+                                HugeIcons.strokeRoundedUser,
+                                color: Colors.white,
+                                size: 30,
+                              ),
                             )
                     : Icon(
                         HugeIcons.strokeRoundedUser,
                         size: 30,
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white,
                       ),
               ),
             ),
@@ -259,7 +294,6 @@ class ConfigurationViewState extends State<ConfigurationView> {
   /// Builds the main card containing Settings, Switch Account, and Logout options
   Widget _buildSettingsCard(BuildContext context, List profiles) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
 
     return Container(
       decoration: BoxDecoration(
@@ -273,97 +307,221 @@ class ConfigurationViewState extends State<ConfigurationView> {
           ),
         ],
       ),
-      child: Column(
-        children: [
-          // App Settings
-          ListTile(
-            leading: Icon(
-              HugeIcons.strokeRoundedSettings02,
-              color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
-            ),
-            title: tr(
-              'Settings',
-              style: TextStyle(
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-            subtitle: tr(
-              'App preferences and sync options',
-              style: TextStyle(
-                color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
-              ),
-            ),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () {
-              Navigator.of(context).push(
-                PageRouteBuilder(
-                  pageBuilder: (context, animation, secondary) =>
-                      SettingsPage(),
-                  transitionDuration: motionProvider.reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 300),
-                  transitionsBuilder: (context, animation, secondary, child) =>
-                      motionProvider.reduceMotion
-                      ? child
-                      : FadeTransition(opacity: animation, child: child),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Material(
+          color: Colors.transparent,
+          child: Column(
+            children: [
+              // App Settings
+              ListTile(
+                leading: Icon(
+                  HugeIcons.strokeRoundedSettings02,
+                  color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
                 ),
-              );
-            },
-          ),
-
-          Divider(
-            height: 1,
-            thickness: 1,
-            color: isDark ? Colors.grey[800] : Colors.grey[200],
-            indent: 20,
-            endIndent: 20,
-          ),
-
-          // Switch Account section (expandable)
-          _buildSwitchAccount(context, profiles),
-
-          Divider(
-            height: 1,
-            thickness: 1,
-            color: isDark ? Colors.grey[800] : Colors.grey.shade200,
-            indent: 20,
-            endIndent: 20,
-          ),
-
-          // Logout
-          ListTile(
-            leading: const Icon(Icons.logout, color: Color(0xFFD32F2F)),
-            title: tr(
-              'Logout',
-              style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFFD32F2F),
-              ),
-            ),
-            subtitle: tr(
-              'Sign out from this device',
-              style: TextStyle(
-                color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
-              ),
-            ),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (_) => ChangeNotifierProvider.value(
-                  value: context.read<LanguageProvider>(),
-                  child: LogoutDialog(storageService: StorageService()),
+                title: tr(
+                  'Settings',
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
                 ),
-              );
-            },
+                subtitle: tr(
+                  'App preferences and sync options',
+                  style: TextStyle(
+                    color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () {
+                  Navigator.of(context).push(
+                    PageRouteBuilder(
+                      pageBuilder: (context, animation, secondary) =>
+                          SettingsPage(),
+                      transitionDuration: const Duration(milliseconds: 300),
+                      transitionsBuilder:
+                          (context, animation, secondary, child) =>
+                              FadeTransition(opacity: animation, child: child),
+                    ),
+                  );
+                },
+              ),
+
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: isDark ? Colors.grey[800] : Colors.grey[200],
+                indent: 20,
+                endIndent: 20,
+              ),
+
+              // Switch Account section (expandable)
+              _buildSwitchAccount(context, profiles),
+
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: isDark ? Colors.grey[800] : Colors.grey.shade200,
+                indent: 20,
+                endIndent: 20,
+              ),
+
+              // Logout
+              ListTile(
+                leading: const Icon(Icons.logout, color: Color(0xFFD32F2F)),
+                title: tr(
+                  'Logout',
+                  style: TextStyle(
+                    color: isDark ? Colors.white : const Color(0xFFD32F2F),
+                  ),
+                ),
+                subtitle: tr(
+                  'Sign out from this device',
+                  style: TextStyle(
+                    color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
+                  ),
+                ),
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (_) => ChangeNotifierProvider.value(
+                      value: context.read<LanguageProvider>(),
+                      child: LogoutDialog(storageService: StorageService()),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Shows a confirmation dialog and removes the given saved account
+  /// (and its stored password) if confirmed.
+  Future<void> _confirmRemoveAccount(
+    BuildContext context,
+    Map<String, dynamic> user,
+  ) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final userName = (user['userName'] ?? '').toString();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: isDark ? 0 : 8,
+        backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+        title: tr(
+          'Remove Account',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: isDark
+                ? Colors.white
+                : Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        content: tr(
+          userName.isNotEmpty
+              ? 'Are you sure you want to remove $userName from your saved accounts?'
+              : 'Are you sure you want to remove this account from your saved accounts?',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: isDark
+                ? Colors.grey[300]
+                : Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  style: TextButton.styleFrom(
+                    foregroundColor: isDark
+                        ? Colors.grey[400]
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: tr(
+                    'Cancel',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[600],
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    elevation: isDark ? 0 : 3,
+                  ),
+                  child: tr(
+                    'Remove',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
+
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await StorageService().removeAccount(
+        userLogin: (user['userLogin'] ?? '').toString(),
+        userName: userName,
+        userId: user['userId'] is int
+            ? user['userId'] as int
+            : int.tryParse('${user['userId']}') ?? 0,
+        url: (user['url'] ?? '').toString(),
+        database: (user['database'] ?? '').toString(),
+      );
+      await SecureStorageService().deletePassword(
+        url: (user['url'] ?? '').toString(),
+        database: (user['database'] ?? '').toString(),
+        username: (user['userLogin'] ?? '').toString(),
+      );
+      if (context.mounted) {
+        CustomSnackbar.showSuccess(
+          context,
+          userName.isNotEmpty ? 'Account $userName removed' : 'Account removed',
+        );
+        setState(() {});
+      }
+    } catch (_) {
+      if (context.mounted) {
+        CustomSnackbar.showError(context, 'Failed to remove account');
+      }
+    }
   }
 
   /// Expandable section for switching between saved accounts
   Widget _buildSwitchAccount(BuildContext context, List profiles) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
 
     return Theme(
       data: Theme.of(context).copyWith(
@@ -392,13 +550,26 @@ class ConfigurationViewState extends State<ConfigurationView> {
             builder: (context, snapshot) {
               final accounts = snapshot.data ?? [];
 
-              final currentUserId = profiles.isNotEmpty
-                  ? profiles.first.id
-                  : null;
+              // Prefer the locally persisted user id (set at login) over the
+              // live profile fetch — the latter can be null if it fails
+              // (no network, no HR access, etc.), which would otherwise make
+              // the active account look like a distinct "other" account.
+              final currentUserId =
+                  this.currentUserId ??
+                  (profiles.isNotEmpty ? profiles.first.id : null);
 
               final otherAccounts = accounts.where((user) {
-                return user["userId"] != currentUserId &&
-                    (user["userName"] ?? "").toString().isNotEmpty;
+                final userUrl = user['url'] ?? '';
+                final userDatabase = user['database'] ?? '';
+                final userName = user['userName'] ?? '';
+                final userId = user['userId'] ?? '';
+
+                final isSameAccount =
+                    userUrl == currentUrl &&
+                    userDatabase == currentDatabase &&
+                    userId == currentUserId;
+
+                return !isSameAccount && userName.isNotEmpty;
               }).toList();
 
               return Column(
@@ -412,9 +583,7 @@ class ConfigurationViewState extends State<ConfigurationView> {
                           Icon(
                             HugeIcons.strokeRoundedUserAdd01,
                             size: 30,
-                            color: isDark
-                                ? Colors.grey[600]
-                                : Colors.grey[400],
+                            color: isDark ? Colors.grey[600] : Colors.grey[400],
                           ),
                           const SizedBox(height: 16),
                           tr(
@@ -424,13 +593,15 @@ class ConfigurationViewState extends State<ConfigurationView> {
                               fontSize: 16,
                             ),
                           ),
-                          SizedBox(height: 5,),
+                          SizedBox(height: 5),
                           tr(
                             'Add multiple accounts to switch between them quickly',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 14,
-                              color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
+                              color: isDark
+                                  ? Colors.grey[400]!
+                                  : Colors.grey[600]!,
                             ),
                           ),
                         ],
@@ -447,106 +618,215 @@ class ConfigurationViewState extends State<ConfigurationView> {
                       }
                     } catch (_) {}
 
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: avatar != null
-                            ? MemoryImage(avatar)
-                            : null,
-                        child: avatar == null ? const Icon(Icons.person) : null,
+                    final accountKey =
+                        '${user['url']}|${user['database']}|${user['userId']}';
+
+                    return Container(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
                       ),
-                      title: tr(
-                        user['userName'] ?? "",
-                        style: TextStyle(
-                          color: isDark ? Colors.white : Colors.black87,
-                          fontSize: 16,
-                        ),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF434242) : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            offset: const Offset(0, -2),
+                            blurRadius: 6,
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            offset: const Offset(0, 3),
+                            blurRadius: 6,
+                          ),
+                        ],
                       ),
-                      subtitle: tr(
-                        user['userLogin'] ?? "",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
-                        ),
-                      ),
-                      trailing:
-                          BlocListener<ConfigurationBloc, ConfigurationState>(
-                            listenWhen: (prev, curr) =>
-                                prev.switchStatus != curr.switchStatus &&
-                                curr.switchStatus == SwitchStatus.completed,
-                            listener: (context, state) {
-                              setState(() {
-                                isSwitching = false;
-                              });
-                              AppBootstrapper.reloadAppBlocs(context);
-                              Navigator.pushAndRemoveUntil(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: BlocListener<ConfigurationBloc, ConfigurationState>(
+                          listenWhen: (prev, curr) =>
+                              prev.switchStatus != curr.switchStatus &&
+                              (curr.switchStatus == SwitchStatus.completed ||
+                                  curr.switchStatus == SwitchStatus.failed),
+                          listener: (context, state) {
+                            if (_switchingKey != accountKey) return;
+                            setState(() {
+                              isSwitching = false;
+                              _switchingKey = null;
+                            });
+                            if (state.switchStatus == SwitchStatus.failed) {
+                              CustomSnackbar.showError(
                                 context,
-                                PageRouteBuilder(
-                                  pageBuilder: (_, animation, secondary) =>
-                                      const CommonAppBar(),
-                                  transitionDuration:
-                                      motionProvider.reduceMotion
-                                      ? Duration.zero
-                                      : const Duration(milliseconds: 300),
-                                  transitionsBuilder:
-                                      (context, animation, sec, child) =>
-                                          motionProvider.reduceMotion
-                                          ? child
-                                          : FadeTransition(
-                                              opacity: animation,
-                                              child: child,
-                                            ),
-                                ),
-                                (_) => false,
+                                state.error ??
+                                    'Failed to switch account. Please try again.',
                               );
-                            },
-                            child: TextButton(
-                              onPressed: () async {
-                                setState(() {
-                                  isSwitching = true;
-                                });
-                                context.read<ConfigurationBloc>().add(
-                                  SwitchAccountEvent(user),
-                                );
-                              },
-                              child: isSwitching
-                                  ? LoadingAnimationWidget.threeArchedCircle(
-                                      color: isDark
-                                          ? Colors.white
-                                          : AppStyle.primaryColor,
-                                      size: 20,
-                                    )
-                                  : tr(
-                                      "Switch",
+                              return;
+                            }
+                            AppBootstrapper.reloadAppBlocs(context);
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              PageRouteBuilder(
+                                pageBuilder: (_, animation, secondary) =>
+                                    const CommonAppBar(),
+                                transitionDuration: const Duration(
+                                  milliseconds: 300,
+                                ),
+                                transitionsBuilder:
+                                    (context, animation, sec, child) =>
+                                        FadeTransition(
+                                          opacity: animation,
+                                          child: child,
+                                        ),
+                              ),
+                              (_) => false,
+                            );
+                          },
+                          child: Material(
+                            color: Colors.transparent,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: ListTile(
+                                onTap: isSwitching
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          isSwitching = true;
+                                          _switchingKey = accountKey;
+                                        });
+                                        context.read<ConfigurationBloc>().add(
+                                          SwitchAccountEvent(user),
+                                        );
+                                      },
+                                leading: CircleAvatar(
+                                  backgroundColor: AppStyle.primaryColor,
+                                  child: avatar == null
+                                      ? const Icon(
+                                          HugeIcons.strokeRoundedUser,
+                                          color: Colors.white,
+                                        )
+                                      : isSvgBytes(avatar)
+                                      ? ClipOval(
+                                          child: SvgPicture.memory(
+                                            avatar,
+                                            width: 40,
+                                            height: 40,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        )
+                                      : ClipOval(
+                                          child: Image.memory(
+                                            avatar,
+                                            width: 40,
+                                            height: 40,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                ),
+                                title: Builder(
+                                  builder: (_) {
+                                    final name = user['userName'] ?? '';
+                                    return Text.rich(
+                                      TextSpan(
+                                        children: [
+                                          TextSpan(
+                                            text: name,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w500,
+                                              fontSize: 16,
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : Colors.black87,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if ((user['userLogin'] ?? '').isNotEmpty)
+                                      tr(
+                                        user['userLogin'],
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: isDark
+                                              ? Colors.grey[400]!
+                                              : Colors.grey[600]!,
+                                        ),
+                                      ),
+                                    tr(
+                                      'Database: ${user['database'] ?? ''}',
                                       style: TextStyle(
-                                        color: isDark
-                                            ? Colors.white
-                                            : AppStyle.primaryColor,
-                                        fontSize: 14,
+                                        fontSize: 12,
+                                        color: Colors.grey[500]!,
                                       ),
                                     ),
+                                  ],
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    PopupMenuButton<String>(
+                                      icon: Icon(
+                                        Icons.more_vert,
+                                        color: isDark
+                                            ? Colors.grey[400]
+                                            : Colors.grey[600],
+                                      ),
+                                      onSelected: (value) {
+                                        if (value == 'remove') {
+                                          _confirmRemoveAccount(context, user);
+                                        }
+                                      },
+                                      itemBuilder: (context) => [
+                                        PopupMenuItem(
+                                          value: 'remove',
+                                          child: Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.delete_outline,
+                                                color: Colors.red,
+                                                size: 20,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              tr(
+                                                'Remove',
+                                                style: const TextStyle(
+                                                  color: Colors.red,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
+                        ),
+                      ),
                     );
                   }),
                   const SizedBox(height: 10),
 
                   // Add new account button
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () async{
-                          final prefs =
-                              await SharedPreferences
-                              .getInstance();
-                          final url =
-                              prefs.getString('url') ??
-                                  '';
-                          final database =
-                              prefs.getString(
-                                  'database') ??
-                                  '';
+                        onPressed: () async {
+                          final prefs = await SharedPreferences.getInstance();
+                          final url = prefs.getString('url') ?? '';
+                          final database = prefs.getString('database') ?? '';
+                          final session =
+                              await CompanySessionManager.getCurrentSession();
                           Navigator.pop(context);
                           Navigator.of(context).push(
                             MaterialPageRoute(
@@ -555,6 +835,7 @@ class ConfigurationViewState extends State<ConfigurationView> {
                                 child: ServerUrlScreen(
                                   serverUrl: url,
                                   database: database,
+                                  session: session!,
                                 ),
                               ),
                             ),

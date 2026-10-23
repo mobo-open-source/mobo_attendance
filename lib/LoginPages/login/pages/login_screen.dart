@@ -6,7 +6,6 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:provider/provider.dart';
 import '../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../CommonWidgets/core/providers/language_provider.dart';
-import '../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../credetials/pages/credential_page.dart';
 import '../bloc/login_bloc.dart';
 
@@ -243,8 +242,6 @@ class _LoginViewState extends State<_LoginView> {
   /// - Server URL
   /// - Selected or manually entered database
   void _onNextPressed(BuildContext context) {
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
-
     final state = context.read<LoginBloc>().state;
     String finalDb = state.selectedDatabase ?? '';
 
@@ -277,14 +274,9 @@ class _LoginViewState extends State<_LoginView> {
               url: cleanUrl,
               database: finalDb,
             ),
-        transitionDuration: motionProvider.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 300),
-        reverseTransitionDuration: motionProvider.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 300),
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          if (motionProvider.reduceMotion) return child;
           return FadeTransition(opacity: animation, child: child);
         },
       ),
@@ -311,17 +303,26 @@ class _UrlInputField extends StatelessWidget {
           p.urlSuggestions != c.urlSuggestions ||
           p.urlHistory != c.urlHistory,
       builder: (context, state) {
+        String stripProtocol(String value) => value.replaceFirst(
+          RegExp(r'^https?://', caseSensitive: false),
+          '',
+        );
+        String normalize(String value) => stripProtocol(value)
+            .trim()
+            .toLowerCase()
+            .replaceFirst(RegExp(r'/+$'), '');
+
         return RawAutocomplete<String>(
+          displayStringForOption: stripProtocol,
           optionsBuilder: (value) {
-            final input = value.text.trim().toLowerCase();
-            if (input.isEmpty) return const Iterable<String>.empty();
-            final matches = state.urlSuggestions.where(
-              (u) => u.toLowerCase().contains(input),
-            );
-            if (matches.length == 1 && matches.first.toLowerCase() == input) {
+            final input = normalize(value.text);
+            if (input.isEmpty) return state.urlSuggestions;
+            if (state.urlSuggestions.any((u) => normalize(u) == input)) {
               return const Iterable<String>.empty();
             }
-            return matches;
+            return state.urlSuggestions.where(
+              (u) => normalize(u).contains(input),
+            );
           },
 
           onSelected: (selection) {
@@ -330,6 +331,7 @@ class _UrlInputField extends StatelessWidget {
             if (entry != null && entry['db']?.isNotEmpty == true) {
               context.read<LoginBloc>().add(DatabaseSelected(entry['db']!));
             }
+            FocusScope.of(context).unfocus();
           },
           fieldViewBuilder: (context, ctrl, focusNode, onSubmitted) {
             return TextFormField(
@@ -343,7 +345,28 @@ class _UrlInputField extends StatelessWidget {
                 }
                 return null;
               },
-              onChanged: (v) => context.read<LoginBloc>().add(UrlChanged(v)),
+              onChanged: (v) {
+                context.read<LoginBloc>().add(UrlChanged(v));
+
+                final protocolMatch = RegExp(
+                  r'^https?://',
+                  caseSensitive: false,
+                ).firstMatch(v);
+                if (protocolMatch != null) {
+                  final stripped = v.substring(protocolMatch.end);
+                  ctrl.value = TextEditingValue(
+                    text: stripped,
+                    selection: TextSelection.collapsed(offset: stripped.length),
+                  );
+                  v = stripped;
+                }
+
+                final input = normalize(v);
+                if (input.isNotEmpty &&
+                    state.urlSuggestions.any((u) => normalize(u) == input)) {
+                  focusNode.unfocus();
+                }
+              },
               style: GoogleFonts.manrope(
                 color: Colors.black,
                 fontSize: 14,

@@ -102,7 +102,7 @@ void main() {
     );
 
     blocTest(
-      'emits [CreateAttendanceSaving, CreateAttendanceError] when attendance is already exist',
+      'emits [CreateAttendanceSaving, errorMessage] when attendance is already exist',
       build: () {
         when(
           () => mockAttendanceCreateService.isEmployeeAlreadyCheckedIn(any()),
@@ -121,12 +121,11 @@ void main() {
       act: (bloc) => bloc.add(SaveAttendance()),
       expect: () => [
         isA<CreateAttendanceSaving>(),
-        isA<CreateAttendanceError>().having(
-          (s) => s.message,
-          'message',
-          "Cannot create new attendance_onSaveAttendance for John Doe. Employee hasn't checked out yet.",
+        isA<CreateAttendanceLoaded>().having(
+              (s) => s.errorMessage,
+          'errorMessage',
+          "Cannot create new attendance for John Doe. Employee hasn't checked out yet.",
         ),
-        isA<CreateAttendanceLoaded>(),
       ],
       verify: (_) {
         verify(

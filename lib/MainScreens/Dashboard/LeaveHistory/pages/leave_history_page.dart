@@ -8,6 +8,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../../CommonWidgets/globals.dart';
+import '../../../../CommonWidgets/shared/widgets/custom_search_textfield.dart';
 import '../bloc/leave_history_bloc.dart';
 
 /// Entry point widget for the Leave History feature.
@@ -585,10 +586,10 @@ class _LeaveHistoryViewState extends State<LeaveHistoryView> {
         ),
         title: tr(
           "Leave History",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black,
-            )
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : Colors.black,
+          ),
         ),
       ),
       body: BlocBuilder<LeaveHistoryBloc, LeaveHistoryState>(
@@ -603,71 +604,20 @@ class _LeaveHistoryViewState extends State<LeaveHistoryView> {
                       horizontal: 17,
                       vertical: 10,
                     ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
-                        border: Border.all(color: Colors.transparent, width: 1),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 6,
-                            spreadRadius: 1,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
+                    child: CustomSearchTextField(
+                      controller: _searchController,
+                      hintText: translationService.getCached(
+                        'Search by Date and Time-off type',
                       ),
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          hintText: translationService.getCached(
-                            'Search by Date and Time-off type',
-                          ),
-                          hintStyle: TextStyle(
-                            color: isDark ? Colors.white : Color(0xff1E1E1E),
-                            fontFamily: TextStyle().fontFamily,
-                            fontWeight: FontWeight.w400,
-                            fontStyle: FontStyle.normal,
-                            fontSize: 15,
-                            height: 1.0,
-                            letterSpacing: 0.0,
-                          ),
-                          prefixIcon: IconButton(
-                            icon: Icon(
-                              HugeIcons.strokeRoundedFilterHorizontal,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : Colors.grey[600],
-                              size: 18,
-                            ),
-                            tooltip: translationService.getCached(
-                              'Filter & Group By',
-                            ),
-                            onPressed: () => _openFilterGroupBySheet(context),
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? Colors.white
-                                  : AppStyle.primaryColor,
-                            ),
-                          ),
-                        ),
-                        onChanged: (value) {
-                          context.read<LeaveHistoryBloc>().add(
-                            UpdateSearchQuery(value),
-                          );
-                        },
+                      filterTooltip: translationService.getCached(
+                        'Filter & Group By',
                       ),
+                      onFilterTap: () => _openFilterGroupBySheet(context),
+                      onChanged: (value) {
+                        context.read<LeaveHistoryBloc>().add(
+                          UpdateSearchQuery(value),
+                        );
+                      },
                     ),
                   ),
                   Row(
@@ -1128,47 +1078,58 @@ class _LeaveHistoryViewState extends State<LeaveHistoryView> {
               ],
             ),
             margin: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                InkWell(
-                  onTap: () {
-                    final newMap = Map<String, bool>.from(state.groupExpanded);
-                    newMap[groupName] = !expanded;
-                    context.read<LeaveHistoryBloc>().emit(
-                      state.copyWith(groupExpanded: newMap),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            groupName,
-                            style: TextStyle(
-                              color: isDark ? Colors.white : Colors.black,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Material(
+                color: Colors.transparent,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InkWell(
+                      onTap: () {
+                        final newMap = Map<String, bool>.from(
+                          state.groupExpanded,
+                        );
+                        newMap[groupName] = !expanded;
+                        context.read<LeaveHistoryBloc>().emit(
+                          state.copyWith(groupExpanded: newMap),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                groupName,
+                                style: TextStyle(
+                                  color: isDark ? Colors.white : Colors.black,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
                             ),
-                          ),
+                            Icon(
+                              expanded
+                                  ? Icons.keyboard_arrow_up
+                                  : Icons.keyboard_arrow_down,
+                              color: isDark ? Colors.white70 : Colors.black87,
+                            ),
+                          ],
                         ),
-                        Icon(
-                          expanded
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down,
-                          color: isDark ? Colors.white70 : Colors.black87,
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+                    if (expanded)
+                      ...leaves.map(
+                        (leave) => Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: _leaveCard(leave, isDark),
+                        ),
+                      ),
+                  ],
                 ),
-                if (expanded) ...leaves.map((leave) => Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: _leaveCard(leave, isDark),
-                )),
-              ],
+              ),
             ),
           );
         },

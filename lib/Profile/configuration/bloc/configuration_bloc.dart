@@ -1,9 +1,8 @@
-import 'dart:developer';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../../LoginPages/credetials/services/auth_service.dart';
 import '../../../CommonWidgets/core/company/session/company_session_manager.dart';
+import '../../../CommonWidgets/core/security/secure_storage_service.dart';
 import '../../../LoginPages/credetials/services/storage_service.dart';
-import '../../../LoginPages/login/models/session_model.dart';
 import '../../profile/services/profile_service.dart';
 import 'configuration_event.dart';
 import 'configuration_state.dart';
@@ -64,14 +63,18 @@ class ConfigurationBloc extends Bloc<ConfigurationEvent, ConfigurationState> {
 
   /// Switches to a different saved account.
   ///
-  /// Steps:
+  /// Unlike a plain cache copy, this always re-validates the account with the
+  /// server before declaring the switch successful:
   /// 1. Sets `switchStatus: switching`
-  /// 2. Saves new session model to secure storage
-  /// 3. Updates shared preferences (login, url, database)
-  /// 4. Clears company session cache
-  /// 5. Verifies new active session
+  /// 2. Looks up the account's password from secure storage
+  /// 3. Tries to reuse the cached session cookie (cheap, no full re-login)
+  /// 4. Falls back to a full username/password re-authentication
+  /// 5. Persists the fresh session + refreshes the stored account's cached
+  ///    sessionId so future switches are more likely to reuse the cookie
   /// 6. On success: `switchStatus: completed`
-  /// 7. On failure: `switchStatus: failed` + error message
+  /// 7. On failure (bad/missing password, unreachable server, etc.):
+  ///    `switchStatus: failed` + error message — the UI never navigates away
+  ///    on a switch that wasn't actually verified against the server.
   ///
   /// Triggers full app reload via listener in UI.
   Future<void> _switchAccount(
@@ -81,51 +84,80 @@ class ConfigurationBloc extends Bloc<ConfigurationEvent, ConfigurationState> {
     try {
       emit(state.copyWith(switchStatus: SwitchStatus.switching));
 
-      final prefs = await SharedPreferences.getInstance();
       final user = event.user;
+      final url = (user['url'] ?? '').toString();
+      final database = (user['database'] ?? '').toString();
+      final userLogin = (user['userLogin'] ?? '').toString();
+      final storedSessionId = user['sessionId']?.toString();
 
-      // Preserve version & allowed companies
-      final version = prefs.getInt("version") ?? 0;
-      final allowedRaw = prefs.getStringList('allowed_company_ids') ?? [];
-      final allowedCompanyIds = allowedRaw
-          .map((e) => int.tryParse(e) ?? 0)
-          .where((e) => e > 0)
-          .toList();
+      if (url.isEmpty || database.isEmpty || userLogin.isEmpty) {
+        throw Exception('Stored account is missing connection details.');
+      }
 
-      // Save new session
-      await storageService.saveSession(
-        SessionModel(
-          sessionId: user['sessionId'],
-          userName: user['userName'],
-          userLogin: user['userLogin'],
-          userId: user['userId'],
-          serverVersion: user['serverVersion'],
-          userLang: user['userLang'],
-          partnerId: user['partnerId'],
-          userTimezone: user['userTimezone'],
-          companyId: user['companyId'],
-          companyName: user['companyName'],
-          isSystem: user['isSystem'] ?? false,
-          version: version,
-          allowedCompanyIds: allowedCompanyIds,
-        ),
+      final password = await SecureStorageService().getPassword(
+        url: url,
+        database: database,
+        username: userLogin,
       );
 
-      // Update basic user metadata in prefs
-      await prefs.setString('userLogin', user['userLogin'].toString());
-      await prefs.setString('url', user['url'] ?? '');
-      await prefs.setString('database', user['database'] ?? '');
+      if (password == null || password.isEmpty) {
+        throw Exception(
+          'No saved password found for this account. Please remove it and add it again.',
+        );
+      }
 
-      // Clear any cached company/session data
-      await CompanySessionManager.clearSessionCache();
+      bool success = false;
 
-      // Verify switch worked
-      await CompanySessionManager.getCurrentSession();
+      // 1) Try to reuse the cached session cookie first.
+      if (storedSessionId != null && storedSessionId.isNotEmpty) {
+        try {
+          success = await CompanySessionManager.loginAndSaveSession(
+            serverUrl: url,
+            database: database,
+            userLogin: userLogin,
+            password: password,
+            session_Id: storedSessionId,
+          );
+        } catch (_) {
+          success = false;
+        }
+      }
+
+      // 2) Fall back to a full re-authentication if the cookie is stale/invalid.
+      if (!success) {
+        success = await CompanySessionManager.loginAndSaveSession(
+          serverUrl: url,
+          database: database,
+          userLogin: userLogin,
+          password: password,
+        );
+      }
+
+      if (!success) {
+        throw Exception('Failed to switch account. Please try again.');
+      }
+
+      // Refresh the stored account's cached sessionId/metadata so the next
+      // switch is more likely to succeed via the cheap cookie-reuse path.
+      final refreshed = await CompanySessionManager.getCurrentSession();
+      if (refreshed != null) {
+        final updatedAccount = Map<String, dynamic>.from(user)
+          ..['sessionId'] = refreshed.sessionId
+          ..['serverVersion'] = refreshed.serverVersion
+          ..['userLang'] = refreshed.userLang
+          ..['partnerId'] = refreshed.partnerId
+          ..['userTimezone'] = refreshed.userTimezone
+          ..['companyId'] = refreshed.companyId
+          ..['companyName'] = refreshed.companyName
+          ..['isSystem'] = refreshed.isSystem;
+        await storageService.saveAccount(updatedAccount);
+      }
+
       emit(state.copyWith(switchStatus: SwitchStatus.completed));
     } catch (e) {
       emit(state.copyWith(
         switchStatus: SwitchStatus.failed,
-        error: e.toString(),
+        error: e is DatabaseExpiredException ? e.message : e.toString(),
       ));
     }
   }

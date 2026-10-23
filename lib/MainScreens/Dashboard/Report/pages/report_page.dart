@@ -8,6 +8,7 @@ import 'package:lottie/lottie.dart';
 import '../../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../../CommonWidgets/globals.dart';
+import '../../../../CommonWidgets/shared/widgets/custom_search_textfield.dart';
 import '../bloc/report_bloc.dart';
 import '../bloc/report_event.dart';
 import '../bloc/report_state.dart';
@@ -201,54 +202,15 @@ class _ReportViewState extends State<ReportView> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 10),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 6,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
+            child: CustomSearchTextField(
+              hintText: translationService.getCached('Search by Employee'),
+              filterTooltip: translationService.getCached(
+                'Filter & Group By',
               ),
-              child: TextField(
-                onChanged: (value) {
-                  context.read<ReportBloc>().add(UpdateSearchText(value));
-                },
-                decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  hintText: translationService.getCached('Search by Employee'),
-                  hintStyle: TextStyle(
-                    color: isDark ? Colors.white70 : const Color(0xff1E1E1E),
-                    fontSize: 15,
-                  ),
-                  prefixIcon: IconButton(
-                    icon: Icon(
-                      HugeIcons.strokeRoundedFilterHorizontal,
-                      color: isDark ? Colors.grey[400] : Colors.grey[600],
-                      size: 18,
-                    ),
-                    tooltip: translationService.getCached('Filter & Group By'),
-                    onPressed: () => _openFilterSheet(context),
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: isDark ? Colors.white : AppStyle.primaryColor,
-                    ),
-                  ),
-                ),
-              ),
+              onFilterTap: () => _openFilterSheet(context),
+              onChanged: (value) {
+                context.read<ReportBloc>().add(UpdateSearchText(value));
+              },
             ),
           ),
           Row(

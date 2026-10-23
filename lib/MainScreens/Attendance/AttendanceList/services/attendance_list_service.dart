@@ -1,3 +1,4 @@
+import '../../../../CommonWidgets/shared/utils/odoo_binary.dart';
 import 'package:odoo_rpc/odoo_rpc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -550,7 +551,7 @@ class AttendanceListService {
         });
 
         final Map<int, dynamic> employeeImageMap = {
-          for (var emp in employeeData) emp['id']: emp['image_1920'],
+          for (var emp in employeeData) emp['id']: unwrapOdooBinary(emp['image_1920']),
         };
 
         for (var item in attendanceList) {

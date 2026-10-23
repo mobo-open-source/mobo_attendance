@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_snake_navigationbar/flutter_snake_navigationbar.dart';
 import 'package:flutter_svg/svg.dart';
@@ -9,10 +10,10 @@ import 'package:mobo_attendance/MainScreens/AppBars/infrastructure/profile_refre
 import 'package:provider/provider.dart';
 import '../../../CommonWidgets/core/company/infrastructure/company_refresh_bus.dart';
 import '../../../CommonWidgets/core/company/providers/company_provider.dart';
+import '../../../CommonWidgets/core/company/session/company_session_manager.dart';
 import '../../../CommonWidgets/core/company/widgets/company_selector_widget.dart';
 import '../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../CommonWidgets/core/providers/language_provider.dart';
-import '../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../CommonWidgets/globals.dart';
 import '../../../CommonWidgets/shared/widgets/snackbar.dart';
 import '../../../LoginPages/credetials/services/storage_service.dart';
@@ -20,6 +21,7 @@ import '../../../LoginPages/login/models/session_model.dart';
 import '../../../Profile/configuration/pages/configuration.dart';
 import '../../../Profile/profile/models/profile.dart';
 import '../../../Profile/profile/services/profile_service.dart';
+import '../../../Rating/review_service.dart';
 import '../../Attendance/AttendanceList/pages/attendance_list_page.dart';
 import '../../Calendar/pages/calendar_page.dart';
 import '../../Dashboard/AttendanceDashboard/pages/attendance_dashboard_page.dart';
@@ -70,7 +72,16 @@ class _CommonAppBarState extends State<CommonAppBar> {
     storageService = StorageService();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await loadProfile();
+      if (!mounted) return;
+
       await context.read<CompanyProvider>().initialize();
+
+      if (!mounted) return;
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          ReviewService().checkAndShowRating(context);
+        }
+      });
     });
 
     _profileSub = ProfileRefreshBus.onProfileRefresh.listen((_) {
@@ -84,7 +95,6 @@ class _CommonAppBarState extends State<CommonAppBar> {
       if (!mounted) return;
       AppBootstrapper.reloadAppBlocs(context);
     });
-
 
     _currentIndex = widget.initialIndex;
   }
@@ -106,8 +116,18 @@ class _CommonAppBarState extends State<CommonAppBar> {
   /// Loads user profile, updates profile image, name, email,
   /// and stores account info locally.
   Future<void> loadProfile() async {
-    final profileService = ProfileService();
-    profiles = await profileService.loadProfile();
+    try {
+      final profileService = ProfileService();
+      profiles = await profileService.loadProfile();
+    } catch (e) {
+      profiles = [];
+      if (mounted && e.toString().contains('AccessError')) {
+        CustomSnackbar.showWarning(
+          context,
+          'Your account does not have employee access permissions yet. Please contact your administrator to assign the required user role.',
+        );
+      }
+    }
 
     final storedAccounts = await storageService.getAccounts();
     if (!mounted) return;
@@ -124,14 +144,25 @@ class _CommonAppBarState extends State<CommonAppBar> {
 
       final currentAccounts = await storageService.getAccounts();
 
+      // user ids repeat across servers/databases, so match the active
+      // account on url + database + userId, not userId alone.
+      final prefs = await SharedPreferences.getInstance();
+      final activeUrl = prefs.getString('url') ?? '';
+      final activeDb = prefs.getString('database') ?? '';
+
       final existing = currentAccounts.firstWhere(
-        (a) => a['userId'] == profile.id,
+        (a) =>
+            a['userId'] == profile.id &&
+            a['url'] == activeUrl &&
+            a['database'] == activeDb,
         orElse: () => {},
       );
 
-      final accountWithImage = {...existing, 'image': base64Image};
-
-      await storageService.saveAccount(accountWithImage);
+      // Only update an account that is already stored; saving a bare
+      // {image} map would create a nameless, login-less entry.
+      if (existing.isNotEmpty) {
+        await storageService.saveAccount({...existing, 'image': base64Image});
+      }
 
       if (base64Image.isNotEmpty) {
         Uint8List imageBytes = base64Decode(base64Image);
@@ -163,8 +194,10 @@ class _CommonAppBarState extends State<CommonAppBar> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
-    final translationService = Provider.of<LanguageProvider>(context, listen: false);
+    final translationService = Provider.of<LanguageProvider>(
+      context,
+      listen: false,
+    );
 
     return WillPopScope(
       onWillPop: () async {
@@ -182,10 +215,10 @@ class _CommonAppBarState extends State<CommonAppBar> {
         appBar: AppBar(
           title: tr(
             pages[_currentIndex]['title'],
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black,
-              )
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.black,
+            ),
           ),
           backgroundColor: isDark ? Colors.grey[900] : Colors.grey[50],
           automaticallyImplyLeading: false,
@@ -202,7 +235,7 @@ class _CommonAppBarState extends State<CommonAppBar> {
                 CustomSnackbar.showSuccess(context, 'Switched to $companyName');
               },
             ),
-            SizedBox(width: 10,),
+            SizedBox(width: 10),
             GestureDetector(
               onTap: () async {
                 await Navigator.push(
@@ -218,15 +251,12 @@ class _CommonAppBarState extends State<CommonAppBar> {
                           ? mail!
                           : catchTranslate(context, "Unknown"),
                     ),
-                    transitionDuration: motionProvider.reduceMotion
-                        ? Duration.zero
-                        : const Duration(milliseconds: 300),
-                    reverseTransitionDuration: motionProvider.reduceMotion
-                        ? Duration.zero
-                        : const Duration(milliseconds: 300),
+                    transitionDuration: const Duration(milliseconds: 300),
+                    reverseTransitionDuration: const Duration(
+                      milliseconds: 300,
+                    ),
                     transitionsBuilder:
                         (context, animation, secondaryAnimation, child) {
-                          if (motionProvider.reduceMotion) return child;
                           return FadeTransition(
                             opacity: animation,
                             child: child,
@@ -237,7 +267,7 @@ class _CommonAppBarState extends State<CommonAppBar> {
               },
               child: CircleAvatar(
                 radius: 20,
-                backgroundColor: theme.colorScheme.surface,
+                backgroundColor: AppStyle.primaryColor,
                 child: profileImageBytes != null
                     ? isSvgBytes(profileImageBytes!)
                           ? ClipOval(
@@ -255,16 +285,12 @@ class _CommonAppBarState extends State<CommonAppBar> {
                                 height: 40,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => Icon(
-                                  Icons.person,
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.6),
+                                  HugeIcons.strokeRoundedUser,
+                                  color: Colors.white,
                                 ),
                               ),
                             )
-                    : Icon(
-                        Icons.person,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      ),
+                    : Icon(HugeIcons.strokeRoundedUser, color: Colors.white),
               ),
             ),
             const SizedBox(width: 12),
@@ -290,19 +316,20 @@ class _CommonAppBarState extends State<CommonAppBar> {
           items: [
             BottomNavigationBarItem(
               icon: Icon(HugeIcons.strokeRoundedDashboardSquare02),
-              label: translationService.getCached("Dashboard")??"Dashboard",
+              label: translationService.getCached("Dashboard") ?? "Dashboard",
             ),
             BottomNavigationBarItem(
               icon: Icon(HugeIcons.strokeRoundedUserMultiple),
-              label: translationService.getCached("Employees")??"Employees",
+              label: translationService.getCached("Employees") ?? "Employees",
             ),
             BottomNavigationBarItem(
               icon: Icon(HugeIcons.strokeRoundedTask01),
-              label: translationService.getCached("Attendances")??"Attendances",
+              label:
+                  translationService.getCached("Attendances") ?? "Attendances",
             ),
             BottomNavigationBarItem(
               icon: Icon(HugeIcons.strokeRoundedCalendar03),
-              label: translationService.getCached("Calendar")??"Calendar",
+              label: translationService.getCached("Calendar") ?? "Calendar",
             ),
           ],
           snakeViewColor: isDark ? Colors.white : AppStyle.primaryColor,
@@ -349,7 +376,15 @@ class _CommonAppBarState extends State<CommonAppBar> {
       database: user['database'],
       url: user['url'],
     );
+
+    // The session manager caches the session/client in memory and won't
+    // re-read the storage we just updated, so the old account's session
+    // would otherwise silently keep being used until an app restart.
+    await CompanySessionManager.clearSessionCache();
+    await CompanySessionManager.forceRefreshFromPrefs();
+
     if (context.mounted) {
+      AppBootstrapper.reloadAppBlocs(context);
       Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>

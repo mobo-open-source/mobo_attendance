@@ -10,10 +10,11 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:local_auth/error_codes.dart' as auth_error;
+import 'package:flutter/services.dart' show PlatformException;
 import '../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../CommonWidgets/core/language/translation_strings.dart';
 import '../../../CommonWidgets/core/providers/language_provider.dart';
-import '../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../../CommonWidgets/core/providers/theme_provider.dart';
 import '../../../CommonWidgets/globals.dart';
 import '../../../CommonWidgets/shared/widgets/snackbar.dart';
@@ -44,7 +45,6 @@ class _SettingsPageState extends State<SettingsPage> {
   // ────────────────────────────────────────────────
 
   bool darkMode = false;
-  bool reduceMotion = false;
   String language = "English (US)";
   String languageCode = "en_US";
   String currency = "United States dollar";
@@ -99,41 +99,70 @@ class _SettingsPageState extends State<SettingsPage> {
       bool isSupported = await _auth.isDeviceSupported();
 
       if (canCheck || isSupported) {
-        bool authenticated = await _auth.authenticate(
-          localizedReason: 'Enable biometric authentication',
-          options: const AuthenticationOptions(
-            biometricOnly: true,
-            stickyAuth: true,
-          ),
-        );
+        try {
+          bool authenticated = await _auth.authenticate(
+            localizedReason: 'Enable biometric authentication',
+            options: const AuthenticationOptions(
+              biometricOnly: true,
+              stickyAuth: true,
+            ),
+          );
 
-        if (authenticated) {
-          setState(() => _biometricEnabled = true);
-          await prefs.setBool('biometricEnabled', true);
+          if (authenticated) {
+            setState(() => _biometricEnabled = true);
+            await prefs.setBool('biometricEnabled', true);
+            if (mounted) {
+              CustomSnackbar.showSuccess(
+                context,
+                'Biometric authentication enabled.',
+              );
+            }
+          }
+        } on PlatformException catch (e) {
+          setState(() => _biometricEnabled = false);
+          await prefs.setBool('biometricEnabled', false);
+          if (mounted) {
+            CustomSnackbar.showError(context, _biometricErrorMessage(e));
+          }
         }
       } else {
+        setState(() => _biometricEnabled = false);
+        await prefs.setBool('biometricEnabled', false);
         CustomSnackbar.showError(
           context,
           'Biometric authentication not supported on this device.',
         );
-        setState(() => _biometricEnabled = false);
-        await prefs.setBool('biometricEnabled', false);
       }
     } else {
       setState(() => _biometricEnabled = false);
       await prefs.setBool('biometricEnabled', false);
+      if (mounted) {
+        CustomSnackbar.showError(
+          context,
+          'Biometric authentication disabled.',
+        );
+      }
     }
+  }
 
-    if (mounted) {
-      _biometricEnabled
-          ? CustomSnackbar.showSuccess(
-              context,
-              'Biometric authentication enabled.',
-            )
-          : CustomSnackbar.showError(
-              context,
-              'Biometric authentication disabled.',
-            );
+  /// Maps a `local_auth` [PlatformException] to a clear, actionable message
+  /// instead of letting it crash the app as an unhandled exception (e.g. on
+  /// devices/emulators with no screen lock configured, `authenticate()`
+  /// throws `NotAvailable` rather than returning `false`).
+  String _biometricErrorMessage(PlatformException e) {
+    switch (e.code) {
+      case auth_error.notAvailable:
+        return 'Biometric authentication is not available. Please set up a screen lock (PIN, pattern, or password) on this device first.';
+      case auth_error.notEnrolled:
+        return 'No biometrics are enrolled on this device. Add a fingerprint or face in your device settings first.';
+      case auth_error.passcodeNotSet:
+        return 'Set up a screen lock (PIN, pattern, or password) on this device before enabling biometric authentication.';
+      case auth_error.lockedOut:
+        return 'Too many attempts. Biometric authentication is temporarily locked — please try again later.';
+      case auth_error.permanentlyLockedOut:
+        return 'Biometric authentication is locked. Unlock your device with your PIN, pattern, or password first.';
+      default:
+        return 'Could not enable biometric authentication: ${e.message ?? e.code}';
     }
   }
 
@@ -357,84 +386,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           ],
                         ),
                       ),
-
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.visibility_off,
-                              color: isDark
-                                  ? Colors.grey[400]
-                                  : Colors.grey[600],
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  tr(
-                                    'Reduce Motion',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.normal,
-                                      fontSize: 15,
-                                      color: isDark
-                                          ? Colors.white
-                                          : Colors.black,
-                                    ),
-                                  ),
-                                  tr(
-                                    'Minimize animations and motion effect',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.normal,
-                                      color: isDark
-                                          ? Colors.grey[400]!
-                                          : Colors.grey[600]!,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            FlutterSwitch(
-                              width: 60,
-                              activeColor: isDark
-                                  ? Colors.grey[400]!
-                                  : const Color(0xFFC03355),
-                              inactiveColor: isDark
-                                  ? Colors.black
-                                  : Colors.white,
-                              value: Provider.of<MotionProvider>(
-                                context,
-                              ).reduceMotion,
-                              onToggle: (val) async {
-                                Provider.of<MotionProvider>(
-                                  context,
-                                  listen: false,
-                                ).setReduceMotion(val);
-                                await settingsStorageService.setBool(
-                                  'reduceMotion',
-                                  val,
-                                );
-                              },
-                              activeToggleColor: isDark
-                                  ? Colors.black
-                                  : Colors.white,
-                              inactiveToggleColor: isDark
-                                  ? Colors.grey[400]!
-                                  : const Color(0xFFC03355),
-                              showOnOff: false,
-                              switchBorder: Border.all(
-                                color: isDark
-                                    ? Colors.grey[400]!
-                                    : const Color(0xFFC03355).withOpacity(0.7),
-                                width: 1.5,
-                              ),
-                              borderRadius: 30.0,
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -565,237 +516,242 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: tr(
-                              'Language & Region',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 18,
-                                color: isDark ? Colors.white : Colors.black,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: tr(
+                                  'Language & Region',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 18,
+                                    color: isDark ? Colors.white : Colors.black,
+                                  ),
+                                ),
                               ),
-                            ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.refresh,
+                                  color: isDark
+                                      ? Colors.grey[300]
+                                      : Colors.grey[600],
+                                  size: 20,
+                                ),
+                                onPressed: () async {
+                                  setState(() => _isLanguageLoading = true);
+                                  try {
+                                    final settingService = SettingService();
+                                    await loadLanguageAndRegion(settingService);
+                                    setState(() {
+                                      language =
+                                          settingsStorageService.getString(
+                                            'language',
+                                          ) ??
+                                          language;
+                                      currency =
+                                          settingsStorageService.getString(
+                                            'currency',
+                                          ) ??
+                                          currency;
+                                      timezone =
+                                          settingsStorageService.getString(
+                                            'timezone',
+                                          ) ??
+                                          timezone;
+                                    });
+                                    CustomSnackbar.showSuccess(
+                                      context,
+                                      'Language & Region refreshed',
+                                    );
+                                  } catch (e) {
+                                    CustomSnackbar.showError(
+                                      context,
+                                      "Something went wrong please try again later",
+                                    );
+                                  } finally {
+                                    setState(() => _isLanguageLoading = false);
+                                  }
+                                },
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.refresh,
-                              color: isDark
-                                  ? Colors.grey[300]
-                                  : Colors.grey[600],
-                              size: 20,
-                            ),
-                            onPressed: () async {
-                              setState(() => _isLanguageLoading = true);
-                              try {
-                                final settingService = SettingService();
-                                await loadLanguageAndRegion(settingService);
-                                setState(() {
-                                  language =
-                                      settingsStorageService.getString(
-                                        'language',
-                                      ) ??
-                                      language;
-                                  currency =
-                                      settingsStorageService.getString(
-                                        'currency',
-                                      ) ??
-                                      currency;
-                                  timezone =
-                                      settingsStorageService.getString(
-                                        'timezone',
-                                      ) ??
-                                      timezone;
-                                });
-                                CustomSnackbar.showSuccess(
-                                  context,
-                                  'Language & Region refreshed',
-                                );
-                              } catch (e) {
-                                CustomSnackbar.showError(
-                                  context,
-                                  "Something went wrong please try again later",
-                                );
-                              } finally {
-                                setState(() => _isLanguageLoading = false);
+                          const SizedBox(height: 8),
+                          _buildDropdownTile(
+                            icon: HugeIcons.strokeRoundedTranslate,
+                            title: 'Language',
+                            subtitle: 'Select your preferred language',
+                            value: language,
+                            items: _languages,
+                            displayKey: 'name',
+                            onChanged: (selectedName) async {
+                              setState(() {
+                                _isLanguageChanged = true;
+                              });
+                              if (selectedName != null) {
+                                try {
+                                  final selectedLang = _languages.firstWhere(
+                                    (lang) => lang['name'] == selectedName,
+                                    orElse: () => {},
+                                  );
+
+                                  if (selectedLang != {}) {
+                                    final selectedCode = selectedLang['code'];
+                                    setState(() => language = selectedName);
+                                    await settingsStorageService.setString(
+                                      'language',
+                                      selectedName,
+                                    );
+                                    final ts = context.read<LanguageProvider>();
+                                    await ts.initializeTranslator(selectedCode);
+
+                                    setState(() {});
+
+                                    final updatedValue = {
+                                      'lang': selectedCode,
+                                      'tz': timezone,
+                                    };
+                                    final settingService = SettingService();
+                                    await settingService.updateLanguage(
+                                      userId!,
+                                      updatedValue,
+                                    );
+                                    await settingsStorageService.setString(
+                                      'languageCode',
+                                      selectedCode,
+                                    );
+
+                                    final translationService = context
+                                        .read<LanguageProvider>();
+                                    translationService.clearCache();
+
+                                    await translationService
+                                        .initializeTranslator(selectedCode);
+                                    if (!settingsStorageService.exists(
+                                      'translation_cache_$languageCode',
+                                    )) {
+                                      await translationService.preload(
+                                        TranslationStrings.preloadKeys,
+                                      );
+                                    }
+                                    translationService.notifyListeners();
+
+                                    if (mounted) {
+                                      CustomSnackbar.showSuccess(
+                                        context,
+                                        'Language updated successfully',
+                                      );
+                                      _isLanguageChanged = false;
+                                    }
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    CustomSnackbar.showError(
+                                      context,
+                                      'Failed to update language. Please try again later.',
+                                    );
+                                    _isLanguageChanged = false;
+                                  }
+                                }
+                              }
+                            },
+                          ),
+
+                          _buildDropdownTile(
+                            icon: HugeIcons.strokeRoundedDollar01,
+                            title: 'Currency',
+                            subtitle: 'Default currency for transactions',
+                            value: currency,
+                            items: uniqueCurrencyItems,
+                            displayKey: 'full_name',
+                            onChanged: (selected) async {
+                              if (selected != null) {
+                                try {
+                                  setState(() => currency = selected);
+                                  await settingsStorageService.setString(
+                                    'currency',
+                                    selected,
+                                  );
+
+                                  if (mounted) {
+                                    CustomSnackbar.showSuccess(
+                                      context,
+                                      'Currency updated successfully',
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    CustomSnackbar.showError(
+                                      context,
+                                      'Failed to update currency. Please try again later.',
+                                    );
+                                  }
+                                }
+                              }
+                            },
+                          ),
+
+                          _buildDropdownTile(
+                            icon: HugeIcons.strokeRoundedClock01,
+                            title: 'Timezone',
+                            subtitle: 'Your local timezone',
+                            value: timezone,
+                            items: _timezone,
+                            displayKey: 'name',
+                            onChanged: (selectedName) async {
+                              if (selectedName != null) {
+                                try {
+                                  final selectedTz = _timezone.firstWhere(
+                                    (tz) => tz['name'] == selectedName,
+                                    orElse: () => {},
+                                  );
+
+                                  if (selectedTz != {}) {
+                                    final selectedCode = selectedTz['code'];
+                                    setState(() => timezone = selectedName);
+                                    await settingsStorageService.setString(
+                                      'timezone',
+                                      selectedName,
+                                    );
+
+                                    final updatedValue = {
+                                      'lang': languageCode,
+                                      'tz': selectedCode,
+                                    };
+                                    final settingService = SettingService();
+
+                                    await settingService.updateLanguage(
+                                      userId!,
+                                      updatedValue,
+                                    );
+                                    if (mounted) {
+                                      CustomSnackbar.showSuccess(
+                                        context,
+                                        'Timezone updated successfully',
+                                      );
+                                    }
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    CustomSnackbar.showError(
+                                      context,
+                                      'Failed to update language. Please try again later.',
+                                    );
+                                  }
+                                }
                               }
                             },
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      _buildDropdownTile(
-                        icon: HugeIcons.strokeRoundedTranslate,
-                        title: 'Language',
-                        subtitle: 'Select your preferred language',
-                        value: language,
-                        items: _languages,
-                        displayKey: 'name',
-                        onChanged: (selectedName) async {
-                          setState(() {
-                            _isLanguageChanged = true;
-                          });
-                          if (selectedName != null) {
-                            try {
-                              final selectedLang = _languages.firstWhere(
-                                (lang) => lang['name'] == selectedName,
-                                orElse: () => {},
-                              );
-
-                              if (selectedLang != {}) {
-                                final selectedCode = selectedLang['code'];
-                                setState(() => language = selectedName);
-                                await settingsStorageService.setString(
-                                  'language',
-                                  selectedName,
-                                );
-                                final ts = context.read<LanguageProvider>();
-                                await ts.initializeTranslator(selectedCode);
-
-                                setState(() {});
-
-                                final updatedValue = {
-                                  'lang': selectedCode,
-                                  'tz': timezone,
-                                };
-                                final settingService = SettingService();
-                                await settingService.updateLanguage(
-                                  userId!,
-                                  updatedValue,
-                                );
-                                await settingsStorageService.setString(
-                                  'languageCode',
-                                  selectedCode,
-                                );
-
-                                final translationService = context
-                                    .read<LanguageProvider>();
-                                translationService.clearCache();
-
-                                await translationService.initializeTranslator(
-                                  selectedCode,
-                                );
-                                if (!settingsStorageService.exists(
-                                  'translation_cache_$languageCode',
-                                )) {
-                                  await translationService.preload(
-                                    TranslationStrings.preloadKeys,
-                                  );
-                                }
-                                translationService.notifyListeners();
-
-                                if (mounted) {
-                                  CustomSnackbar.showSuccess(
-                                    context,
-                                    'Language updated successfully',
-                                  );
-                                  _isLanguageChanged = false;
-                                }
-                              }
-                            } catch (e) {
-                              if (mounted) {
-                                CustomSnackbar.showError(
-                                  context,
-                                  'Failed to update language. Please try again later.',
-                                );
-                                _isLanguageChanged = false;
-                              }
-                            }
-                          }
-                        },
-                      ),
-
-                      _buildDropdownTile(
-                        icon: HugeIcons.strokeRoundedDollar01,
-                        title: 'Currency',
-                        subtitle: 'Default currency for transactions',
-                        value: currency,
-                        items: uniqueCurrencyItems,
-                        displayKey: 'full_name',
-                        onChanged: (selected) async {
-                          if (selected != null) {
-                            try {
-                              setState(() => currency = selected);
-                              await settingsStorageService.setString(
-                                'currency',
-                                selected,
-                              );
-
-                              if (mounted) {
-                                CustomSnackbar.showSuccess(
-                                  context,
-                                  'Currency updated successfully',
-                                );
-                              }
-                            } catch (e) {
-                              if (mounted) {
-                                CustomSnackbar.showError(
-                                  context,
-                                  'Failed to update currency. Please try again later.',
-                                );
-                              }
-                            }
-                          }
-                        },
-                      ),
-
-                      _buildDropdownTile(
-                        icon: HugeIcons.strokeRoundedClock01,
-                        title: 'Timezone',
-                        subtitle: 'Your local timezone',
-                        value: timezone,
-                        items: _timezone,
-                        displayKey: 'name',
-                        onChanged: (selectedName) async {
-                          if (selectedName != null) {
-                            try {
-                              final selectedTz = _timezone.firstWhere(
-                                (tz) => tz['name'] == selectedName,
-                                orElse: () => {},
-                              );
-
-                              if (selectedTz != {}) {
-                                final selectedCode = selectedTz['code'];
-                                setState(() => timezone = selectedName);
-                                await settingsStorageService.setString(
-                                  'timezone',
-                                  selectedName,
-                                );
-
-                                final updatedValue = {
-                                  'lang': languageCode,
-                                  'tz': selectedCode,
-                                };
-                                final settingService = SettingService();
-
-                                await settingService.updateLanguage(
-                                  userId!,
-                                  updatedValue,
-                                );
-                                if (mounted) {
-                                  CustomSnackbar.showSuccess(
-                                    context,
-                                    'Timezone updated successfully',
-                                  );
-                                }
-                              }
-                            } catch (e) {
-                              if (mounted) {
-                                CustomSnackbar.showError(
-                                  context,
-                                  'Failed to update language. Please try again later.',
-                                );
-                              }
-                            }
-                          }
-                        },
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -818,72 +774,82 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      tr(
-                        'Data & Storage',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 18,
-                          color: isDark ? Colors.white : Colors.black,
-                        ),
-                      ),
-                      ListTile(
-                        leading: Icon(
-                          Icons.delete_sweep_outlined,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                        title: tr(
-                          'Clear Cache',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            fontSize: 15,
-                            color: isDark ? Colors.white : Colors.black,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          tr(
+                            'Data & Storage',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                              color: isDark ? Colors.white : Colors.black,
+                            ),
                           ),
-                        ),
-                        subtitle: FutureBuilder<int>(
-                          future: getCacheSize(),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) return tr('Calculating...');
-                            final sizeInMB = (snapshot.data! / (1024 * 1024))
-                                .toStringAsFixed(2);
-                            final cachedText =
-                                translationService.getCached(
-                                  "MB • Free up space by clearing temporary data",
-                                ) ??
-                                "MB • Free up space by clearing temporary data";
-
-                            final text = (sizeInMB == '0.00')
-                                ? translationService.getCached(
-                                        'No cache data',
-                                      ) ??
-                                      'No cache data'
-                                : '$sizeInMB $cachedText';
-
-                            return tr(
-                              text,
+                          ListTile(
+                            leading: Icon(
+                              Icons.delete_sweep_outlined,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : Colors.grey[600],
+                            ),
+                            title: tr(
+                              'Clear Cache',
                               style: TextStyle(
                                 fontWeight: FontWeight.normal,
-                                color: isDark
-                                    ? Colors.grey[400]!
-                                    : Colors.grey[600]!,
+                                fontSize: 15,
+                                color: isDark ? Colors.white : Colors.black,
                               ),
-                            );
-                          },
-                        ),
-                        onTap: () async {
-                          await clearCache();
-                          setState(() {});
-                          CustomSnackbar.showSuccess(
-                            context,
-                            "Cache cleared successfully",
-                          );
-                        },
+                            ),
+                            subtitle: FutureBuilder<int>(
+                              future: getCacheSize(),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData)
+                                  return tr('Calculating...');
+                                final sizeInMB =
+                                    (snapshot.data! / (1024 * 1024))
+                                        .toStringAsFixed(2);
+                                final cachedText =
+                                    translationService.getCached(
+                                      "MB • Free up space by clearing temporary data",
+                                    ) ??
+                                    "MB • Free up space by clearing temporary data";
+
+                                final text = (sizeInMB == '0.00')
+                                    ? translationService.getCached(
+                                            'No cache data',
+                                          ) ??
+                                          'No cache data'
+                                    : '$sizeInMB $cachedText';
+
+                                return tr(
+                                  text,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.normal,
+                                    color: isDark
+                                        ? Colors.grey[400]!
+                                        : Colors.grey[600]!,
+                                  ),
+                                );
+                              },
+                            ),
+                            onTap: () async {
+                              await clearCache();
+                              setState(() {});
+                              CustomSnackbar.showSuccess(
+                                context,
+                                "Cache cleared successfully",
+                              );
+                            },
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -906,94 +872,108 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      tr(
-                        'Help & Support',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 18,
-                          color: isDark ? Colors.white : Colors.black,
-                        ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          tr(
+                            'Help & Support',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                              color: isDark ? Colors.white : Colors.black,
+                            ),
+                          ),
+                          ListTile(
+                            leading: Icon(
+                              HugeIcons.strokeRoundedHelpCircle,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : Colors.grey[600],
+                            ),
+                            title: tr(
+                              'Odoo Help Center',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                fontSize: 15,
+                                color: isDark ? Colors.white : Colors.black,
+                              ),
+                            ),
+                            subtitle: tr(
+                              'Documentation, guides and resources',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                color: isDark
+                                    ? Colors.grey[400]!
+                                    : Colors.grey[600]!,
+                              ),
+                            ),
+                            onTap: () => _launchUrl(
+                              "https://www.odoo.com/documentation",
+                            ),
+                          ),
+                          ListTile(
+                            leading: Icon(
+                              HugeIcons.strokeRoundedCustomerSupport,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : Colors.grey[600],
+                            ),
+                            title: tr(
+                              'Odoo Support',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                fontSize: 15,
+                                color: isDark ? Colors.white : Colors.black,
+                              ),
+                            ),
+                            subtitle: tr(
+                              'Create a ticket with Odoo Support',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                color: isDark
+                                    ? Colors.grey[400]!
+                                    : Colors.grey[600]!,
+                              ),
+                            ),
+                            onTap: () =>
+                                _launchUrl("https://www.odoo.com/help"),
+                          ),
+                          ListTile(
+                            leading: Icon(
+                              HugeIcons.strokeRoundedUserGroup,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : Colors.grey[600],
+                            ),
+                            title: tr(
+                              'Odoo Community Forum',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                fontSize: 15,
+                                color: isDark ? Colors.white : Colors.black,
+                              ),
+                            ),
+                            subtitle: tr(
+                              'Ask the community for help',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                color: isDark
+                                    ? Colors.grey[400]!
+                                    : Colors.grey[600]!,
+                              ),
+                            ),
+                            onTap: () =>
+                                _launchUrl("https://www.odoo.com/forum/help-1"),
+                          ),
+                        ],
                       ),
-                      ListTile(
-                        leading: Icon(
-                          HugeIcons.strokeRoundedHelpCircle,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                        title: tr(
-                          'Odoo Help Center',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            fontSize: 15,
-                            color: isDark ? Colors.white : Colors.black,
-                          ),
-                        ),
-                        subtitle: tr(
-                          'Documentation, guides and resources',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            color: isDark
-                                ? Colors.grey[400]!
-                                : Colors.grey[600]!,
-                          ),
-                        ),
-                        onTap: () =>
-                            _launchUrl("https://www.odoo.com/documentation"),
-                      ),
-                      ListTile(
-                        leading: Icon(
-                          HugeIcons.strokeRoundedCustomerSupport,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                        title: tr(
-                          'Odoo Support',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            fontSize: 15,
-                            color: isDark ? Colors.white : Colors.black,
-                          ),
-                        ),
-                        subtitle: tr(
-                          'Create a ticket with Odoo Support',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            color: isDark
-                                ? Colors.grey[400]!
-                                : Colors.grey[600]!,
-                          ),
-                        ),
-                        onTap: () => _launchUrl("https://www.odoo.com/help"),
-                      ),
-                      ListTile(
-                        leading: Icon(
-                          HugeIcons.strokeRoundedUserGroup,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                        title: tr(
-                          'Odoo Community Forum',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            fontSize: 15,
-                            color: isDark ? Colors.white : Colors.black,
-                          ),
-                        ),
-                        subtitle: tr(
-                          'Ask the community for help',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            color: isDark
-                                ? Colors.grey[400]!
-                                : Colors.grey[600]!,
-                          ),
-                        ),
-                        onTap: () =>
-                            _launchUrl("https://www.odoo.com/forum/help-1"),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -1016,166 +996,178 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      tr(
-                        'About',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 18,
-                          color: isDark ? Colors.white : Colors.black,
-                        ),
-                      ),
-                      ListTile(
-                        leading: Icon(
-                          HugeIcons.strokeRoundedGlobe02,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                        title: tr(
-                          'Visit Website',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            fontSize: 15,
-                            color: isDark ? Colors.white : Colors.black,
-                          ),
-                        ),
-                        subtitle: Text(
-                          'www.cybrosys.com',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            color: isDark
-                                ? Colors.grey[400]!
-                                : Colors.grey[600]!,
-                          ),
-                        ),
-                        onTap: () => _launchUrl("https://www.cybrosys.com"),
-                      ),
-                      ListTile(
-                        leading: Icon(
-                          HugeIcons.strokeRoundedMail01,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                        title: tr(
-                          'Contact Us',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            fontSize: 15,
-                            color: isDark ? Colors.white : Colors.black,
-                          ),
-                        ),
-                        subtitle: Text(
-                          'info@cybrosys.com',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            color: isDark
-                                ? Colors.grey[400]!
-                                : Colors.grey[600]!,
-                          ),
-                        ),
-                        onTap: () => _launchUrl("mailto:info@cybrosys.com"),
-                      ),
-                      ListTile(
-                        leading: Icon(
-                          Icons.apps,
-                          color: isDark ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                        title: tr(
-                          'More Apps',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            fontSize: 15,
-                            color: isDark ? Colors.white : Colors.black,
-                          ),
-                        ),
-                        subtitle: tr(
-                          'View our other apps on Play Store',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            color: isDark
-                                ? Colors.grey[400]!
-                                : Colors.grey[600]!,
-                          ),
-                        ),
-                        onTap: () => _launchUrl(
-                          "https://play.google.com/store/apps/developer?id=Cybrosys",
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Divider(
-                        color: isDark ? Colors.grey[800] : Colors.grey[200],
-                      ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: tr(
-                          'Follow Us',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 18,
-                            color: isDark ? Colors.white : Colors.black,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildSocialButton(
-                            context,
-                            'assets/facebook.png',
-                            const Color(0xFF1877F2),
-                            () => _launchUrlSmart(
-                              'https://www.facebook.com/cybrosystechnologies',
-                              title: 'Facebook',
+                          tr(
+                            'About',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                              color: isDark ? Colors.white : Colors.black,
                             ),
                           ),
-                          _buildSocialButton(
-                            context,
-                            'assets/linkedin.png',
-                            const Color(0xFF0077B5),
-                            () => _launchUrlSmart(
-                              'https://www.linkedin.com/company/cybrosys/',
-                              title: 'LinkedIn',
+                          ListTile(
+                            leading: Icon(
+                              HugeIcons.strokeRoundedGlobe02,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : Colors.grey[600],
+                            ),
+                            title: tr(
+                              'Visit Website',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                fontSize: 15,
+                                color: isDark ? Colors.white : Colors.black,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'www.cybrosys.com',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                color: isDark
+                                    ? Colors.grey[400]!
+                                    : Colors.grey[600]!,
+                              ),
+                            ),
+                            onTap: () => _launchUrl("https://www.cybrosys.com"),
+                          ),
+                          ListTile(
+                            leading: Icon(
+                              HugeIcons.strokeRoundedMail01,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : Colors.grey[600],
+                            ),
+                            title: tr(
+                              'Contact Us',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                fontSize: 15,
+                                color: isDark ? Colors.white : Colors.black,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'info@cybrosys.com',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                color: isDark
+                                    ? Colors.grey[400]!
+                                    : Colors.grey[600]!,
+                              ),
+                            ),
+                            onTap: () => _launchUrl("mailto:info@cybrosys.com"),
+                          ),
+                          ListTile(
+                            leading: Icon(
+                              Icons.apps,
+                              color: isDark
+                                  ? Colors.grey[400]
+                                  : Colors.grey[600],
+                            ),
+                            title: tr(
+                              'More Apps',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                fontSize: 15,
+                                color: isDark ? Colors.white : Colors.black,
+                              ),
+                            ),
+                            subtitle: tr(
+                              'View our other apps on Play Store',
+                              style: TextStyle(
+                                fontWeight: FontWeight.normal,
+                                color: isDark
+                                    ? Colors.grey[400]!
+                                    : Colors.grey[600]!,
+                              ),
+                            ),
+                            onTap: () => _launchUrl(
+                              "https://play.google.com/store/apps/developer?id=Cybrosys",
                             ),
                           ),
-                          _buildSocialButton(
-                            context,
-                            'assets/instagram.png',
-                            const Color(0xFFE4405F),
-                            () => _launchUrlSmart(
-                              'https://www.instagram.com/cybrosystech/',
-                              title: 'Instagram',
+                          const SizedBox(height: 12),
+                          Divider(
+                            color: isDark ? Colors.grey[800] : Colors.grey[200],
+                          ),
+                          const SizedBox(height: 8),
+                          Center(
+                            child: tr(
+                              'Follow Us',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 18,
+                                color: isDark ? Colors.white : Colors.black,
+                              ),
                             ),
                           ),
-                          _buildSocialButton(
-                            context,
-                            'assets/youtube.png',
-                            const Color(0xFFFF0000),
-                            () => _launchUrlSmart(
-                              'https://www.youtube.com/channel/UCKjWLm7iCyOYINVspCSanjg',
-                              title: 'YouTube',
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _buildSocialButton(
+                                context,
+                                'assets/facebook.png',
+                                const Color(0xFF1877F2),
+                                () => _launchUrlSmart(
+                                  'https://www.facebook.com/cybrosystechnologies',
+                                  title: 'Facebook',
+                                ),
+                              ),
+                              _buildSocialButton(
+                                context,
+                                'assets/linkedin.png',
+                                const Color(0xFF0077B5),
+                                () => _launchUrlSmart(
+                                  'https://www.linkedin.com/company/cybrosys/',
+                                  title: 'LinkedIn',
+                                ),
+                              ),
+                              _buildSocialButton(
+                                context,
+                                'assets/instagram.png',
+                                const Color(0xFFE4405F),
+                                () => _launchUrlSmart(
+                                  'https://www.instagram.com/cybrosystech/',
+                                  title: 'Instagram',
+                                ),
+                              ),
+                              _buildSocialButton(
+                                context,
+                                'assets/youtube.png',
+                                const Color(0xFFFF0000),
+                                () => _launchUrlSmart(
+                                  'https://www.youtube.com/channel/UCKjWLm7iCyOYINVspCSanjg',
+                                  title: 'YouTube',
+                                ),
+                              ),
+                              const Divider(height: 32),
+                            ],
+                          ),
+
+                          const SizedBox(height: 20),
+                          Center(
+                            child: Text(
+                              '© ${DateTime.now().year} Cybrosys Technologies',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? Colors.white
+                                    : AppStyle.primaryColor,
+                                fontWeight: FontWeight.normal,
+                              ),
                             ),
                           ),
-                          const Divider(height: 32),
                         ],
                       ),
-
-                      const SizedBox(height: 20),
-                      Center(
-                        child: Text(
-                          '© ${DateTime.now().year} Cybrosys Technologies',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
-                                ? Colors.white
-                                : AppStyle.primaryColor,
-                            fontWeight: FontWeight.normal,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -1244,22 +1236,15 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _openInAppWebPage(Uri url, {String? title}) async {
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
-
     if (!mounted) return;
     try {
       Navigator.of(context).push(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
               InAppWebPage(url: url, title: title),
-          transitionDuration: motionProvider.reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 300),
-          reverseTransitionDuration: motionProvider.reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 300),
+          transitionDuration: const Duration(milliseconds: 300),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            if (motionProvider.reduceMotion) return child;
             return FadeTransition(opacity: animation, child: child);
           },
         ),

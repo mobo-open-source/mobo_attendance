@@ -33,7 +33,12 @@ class LeaveHistoryBloc extends Bloc<LeaveHistoryEvent, LeaveHistoryState> {
     Emitter<LeaveHistoryState> emit,
   ) async {
     emit(state.copyWith(isLoading: true));
-    await _service.initializeClient();
+    try {
+      await _service.initializeClient();
+    } catch (e) {
+      emit(state.copyWith(isLoading: false));
+      return;
+    }
     add(const FetchLeaves(page: 0));
   }
 

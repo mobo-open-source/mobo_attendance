@@ -5,10 +5,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../CommonWidgets/core/company/services/company_session_service.dart';
+import '../../../CommonWidgets/core/security/secure_storage_service.dart';
 import '../../../MainScreens/AppBars/services/common_storage_service.dart';
 import '../../login/models/session_model.dart';
 import '../pages/totp_page.dart';
-import '../services/storage_service.dart';
+import '../services/auth_service.dart';
 
 part 'credentials_event.dart';
 
@@ -97,7 +98,6 @@ class CredentialsBloc extends Bloc<CredentialsEvent, CredentialsState> {
       }
 
       final session = await sessionService.getCurrentSession();
-      await StorageService().clearAccounts();
       await commonStorageService.saveAccount({
         'userName': session?.userName,
         'userLogin': session?.userLogin,
@@ -114,6 +114,15 @@ class CredentialsBloc extends Bloc<CredentialsEvent, CredentialsState> {
         'database': event.database,
         'image': '',
       });
+
+      // Store the password securely so a stale session can be silently
+      // refreshed later without prompting the user to log in again.
+      await SecureStorageService().savePassword(
+        url: fullUrl,
+        database: event.database,
+        username: event.username.trim(),
+        password: event.password.trim(),
+      );
 
       emit(
         state.copyWith(isLoading: false, loginSuccess: true, session: session),
@@ -178,6 +187,8 @@ class CredentialsBloc extends Bloc<CredentialsEvent, CredentialsState> {
   ///
   /// Also detects 2FA requirement and navigates to TOTP screen.
   Future<String> _formatError(dynamic error, SubmitLogin event) async {
+    if (error is DatabaseExpiredException) return error.message;
+
     final errorStr = error.toString().toLowerCase();
 
     final context = event.context;
@@ -188,7 +199,6 @@ class CredentialsBloc extends Bloc<CredentialsEvent, CredentialsState> {
     if (errorStr.contains('null') ||
         errorStr.contains('two factor') ||
         errorStr.contains('2fa')) {
-      await StorageService().clearAccounts();
       await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => TotpPage(

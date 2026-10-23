@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/employee_form_service.dart';
 
 part 'employee_form_event.dart';
@@ -52,7 +53,6 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
     on<AddSkill>(_onAddSkill);
     on<UpdateSkill>(_onUpdateSkill);
     on<DeleteSkill>(_onDeleteSkill);
-
     // Generic change detector (marks form as dirty)
     on<FormFieldChanged>((event, emit) {
       emit(state.copyWith());
@@ -111,6 +111,7 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
 
     emit(state.copyWith(
       isLoading: true,
+
       clearMessage: true,
 
       name: '',
@@ -160,6 +161,7 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
       emit(
         state.copyWith(
           isLoading: false,
+
           hasEditPermission: hasPermission,
           employeeDetails: details,
 
@@ -194,6 +196,7 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
       emit(
         state.copyWith(
           isLoading: false,
+
           errorMessage: "Something went wrong, Please try again later.",
           jobList: preservedJobList,
           departmentList: preservedDepartmentList,
@@ -343,6 +346,10 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
 
     try {
       await _service.initializeClient();
+      final prefs = await SharedPreferences.getInstance();
+      final majorVersion = parseMajorVersion(
+        prefs.getString('serverVersion') ?? '0',
+      );
 
       final data = {
         'name': state.nameController.text,
@@ -353,7 +360,7 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
         'mobile_phone': state.mobilePhoneController.text,
         'parent_id': state.managerId,
         'coach_id': state.coachId,
-        'employee_type': state.employeeType,
+        if (majorVersion < 20) 'employee_type': state.employeeType,
         'user_id': state.relatedUserId,
         'image_1920': state.profileImageBase64,
         if (state.pinController.text != 'N/A') 'pin': state.pinController.text,
@@ -378,6 +385,7 @@ class EmployeeFormBloc extends Bloc<EmployeeFormEvent, EmployeeFormState> {
             successMessage: "Employee details updated successfully",
           ),
         );
+
       } else {
         emit(
           state.copyWith(

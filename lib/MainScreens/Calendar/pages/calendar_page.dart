@@ -4,16 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:intl/intl.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lottie/lottie.dart';
 import 'package:mobo_attendance/CommonWidgets/globals.dart';
 import 'package:mobo_attendance/CommonWidgets/shared/widgets/snackbar.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../../CommonWidgets/core/company/infrastructure/company_refresh_bus.dart';
 import '../../../CommonWidgets/core/company/providers/company_provider.dart';
 import '../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../CommonWidgets/core/providers/language_provider.dart';
-import '../../../CommonWidgets/core/providers/motion_provider.dart';
 import '../../AppBars/infrastructure/profile_refresh_bus.dart';
 import '../../AppBars/pages/common_app_bar.dart';
 import '../bloc/calendar_bloc.dart';
@@ -422,22 +421,16 @@ class _CalendarPageState extends State<CalendarPage> {
     });
   }
 
-  /// Custom back navigation with optional reduced motion support
+  /// Custom back navigation
   Future<bool> _handleBackNavigation() async {
-    final motionProvider = Provider.of<MotionProvider>(context, listen: false);
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
             const CommonAppBar(initialIndex: 2),
-        transitionDuration: motionProvider.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 300),
-        reverseTransitionDuration: motionProvider.reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 300),
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          if (motionProvider.reduceMotion) return child;
           return FadeTransition(opacity: animation, child: child);
         },
       ),
@@ -490,16 +483,11 @@ class _CalendarPageState extends State<CalendarPage> {
                     },
                     builder: (context, state) {
                       if (state is CalendarLoading) {
-                        return Center(
-                          child: LoadingAnimationWidget.threeArchedCircle(
-                            color: isDark
-                                ? Colors.white
-                                : AppStyle.primaryColor,
-                            size: 60,
-                          ),
-                        );
+                        return _buildCalendarShimmer(isDark);
                       }
                       if (state is CalendarLoaded) {
+                        if (state.permissionError)
+                          return _buildPermissionErrorState(isDark);
                         if (state.isAppNotInstalled)
                           return _buildErrorModuleCheckState(isDark);
                         if (state.catchError) return _buildErrorState(isDark);
@@ -514,13 +502,107 @@ class _CalendarPageState extends State<CalendarPage> {
                           isDark,
                         );
                       }
-                      return Center(child: tr("Loading attendance data..."));
+                      return _buildCalendarShimmer(isDark);
                     },
                   ),
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Shimmer skeleton shown while attendance data loads
+  /// (mimics the calendar card and the day-detail card).
+  Widget _buildCalendarShimmer(bool isDark) {
+    final baseColor = isDark ? Colors.grey[800]! : Colors.grey[300]!;
+    final highlightColor = isDark ? Colors.grey[700]! : Colors.grey[100]!;
+
+    Widget bar(double w, double h, {double radius = 6}) => Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+
+    return Shimmer.fromColors(
+      baseColor: baseColor,
+      highlightColor: highlightColor,
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      bar(24, 24, radius: 12),
+                      bar(140, 20),
+                      bar(24, 24, radius: 12),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(4, (_) => bar(64, 12)),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: List.generate(7, (_) => bar(32, 12)),
+                  ),
+                  const SizedBox(height: 16),
+                  for (int r = 0; r < 5; r++)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: List.generate(
+                          7,
+                          (_) => bar(32, 32, radius: 16),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  bar(48, 48, radius: 12),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        bar(120, 14),
+                        const SizedBox(height: 8),
+                        bar(200, 12),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -549,6 +631,70 @@ class _CalendarPageState extends State<CalendarPage> {
               const SizedBox(height: 8),
               tr(
                 'Pull to refresh or tap retry',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white60 : Colors.black54,
+                ),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: isDark
+                      ? Colors.white
+                      : AppStyle.primaryColor,
+                  side: BorderSide(
+                    color: isDark
+                        ? Colors.grey[600]!
+                        : AppStyle.primaryColor.withOpacity(0.3),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () async {
+                  await context.read<CompanyProvider>().initialize();
+                  ProfileRefreshBus.notifyProfileRefresh();
+                  CompanyRefreshBus.notify();
+                },
+                child: tr('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds UI shown when the logged-in account lacks employee/HR access
+  /// rights in Odoo (e.g. a newly created user not yet assigned the
+  /// "Officer"/"User" role), instead of the misleading generic error screen.
+  Widget _buildPermissionErrorState(bool isDark) {
+    return Center(
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Lottie.asset('assets/Error_404.json', width: 300, height: 300),
+              tr(
+                'Access Restricted',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+                ),
+              ),
+              const SizedBox(height: 8),
+              tr(
+                'Your account does not have employee access permissions yet. Please contact your administrator to assign the required user role.',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
                   color: isDark ? Colors.white60 : Colors.black54,

@@ -30,6 +30,7 @@ class AttendanceDashboardState extends Equatable {
   final bool catchError;
   final bool connectionError;
   final bool isAppNotInstalled;
+  final bool permissionError;
 
   final int? staffCount;
   final int? staffPresentCount;
@@ -84,6 +85,7 @@ class AttendanceDashboardState extends Equatable {
     this.catchError = false,
     this.connectionError = false,
     this.isAppNotInstalled = false,
+    this.permissionError = false,
 
   });
 
@@ -122,8 +124,10 @@ class AttendanceDashboardState extends Equatable {
     bool? catchError,
     bool? connectionError,
     bool? isAppNotInstalled,
-
-
+    bool? permissionError,
+    // When true, stat fields that are null are reset instead of keeping the
+    // previous value (used on full reloads / account switches).
+    bool clearStats = false,
   }) {
     return AttendanceDashboardState(
       isLoading: isLoading ?? this.isLoading,
@@ -132,7 +136,7 @@ class AttendanceDashboardState extends Equatable {
       isTimerLoading: isTimerLoading ?? this.isTimerLoading,
       isCheckIn: isCheckIn ?? this.isCheckIn,
       userName: userName ?? this.userName,
-      profileImageBytes: profileImageBytes ?? this.profileImageBytes,
+      profileImageBytes: profileImageBytes,
       checkInTime: checkInTime ?? this.checkInTime,
       lastCheckOutTime: lastCheckOutTime ?? this.lastCheckOutTime,
       workedHoursText: workedHoursText ?? this.workedHoursText,
@@ -140,25 +144,26 @@ class AttendanceDashboardState extends Equatable {
       recentActivity: recentActivity ?? this.recentActivity,
       accessForAdmin: accessForAdmin ?? this.accessForAdmin,
       accessForLeaveManager: accessForLeaveManager ?? this.accessForLeaveManager,
-      staffCount: staffCount ?? this.staffCount,
-      staffPresentCount: staffPresentCount ?? this.staffPresentCount,
-      staffAbsentCount: staffAbsentCount ?? this.staffAbsentCount,
-      leavePendingCount: leavePendingCount ?? this.leavePendingCount,
-      staffOnTimeCount: staffOnTimeCount ?? this.staffOnTimeCount,
-      staffLateInCount: staffLateInCount ?? this.staffLateInCount,
-      staffEarlyInCount: staffEarlyInCount ?? this.staffEarlyInCount,
+      staffCount: clearStats ? staffCount : (staffCount ?? this.staffCount),
+      staffPresentCount: clearStats ? staffPresentCount : (staffPresentCount ?? this.staffPresentCount),
+      staffAbsentCount: clearStats ? staffAbsentCount : (staffAbsentCount ?? this.staffAbsentCount),
+      leavePendingCount: clearStats ? leavePendingCount : (leavePendingCount ?? this.leavePendingCount),
+      staffOnTimeCount: clearStats ? staffOnTimeCount : (staffOnTimeCount ?? this.staffOnTimeCount),
+      staffLateInCount: clearStats ? staffLateInCount : (staffLateInCount ?? this.staffLateInCount),
+      staffEarlyInCount: clearStats ? staffEarlyInCount : (staffEarlyInCount ?? this.staffEarlyInCount),
       pendingLeaves: pendingLeaves ?? this.pendingLeaves,
-      attendanceStatus: attendanceStatus ?? this.attendanceStatus,
+      attendanceStatus: clearStats ? attendanceStatus : (attendanceStatus ?? this.attendanceStatus),
       errorMessage: errorMessage,
-      staffPresentIds: staffPresentIds ?? this.staffPresentIds,
-      staffAbsentIds: staffAbsentIds ?? this.staffAbsentIds,
-      onTimeIds: onTimeIds ?? this.onTimeIds,
-      lateInIds: lateInIds ?? this.lateInIds,
-      earlyInIds: earlyInIds ?? this.earlyInIds,
+      staffPresentIds: clearStats ? staffPresentIds : (staffPresentIds ?? this.staffPresentIds),
+      staffAbsentIds: clearStats ? staffAbsentIds : (staffAbsentIds ?? this.staffAbsentIds),
+      onTimeIds: clearStats ? onTimeIds : (onTimeIds ?? this.onTimeIds),
+      lateInIds: clearStats ? lateInIds : (lateInIds ?? this.lateInIds),
+      earlyInIds: clearStats ? earlyInIds : (earlyInIds ?? this.earlyInIds),
       last7DaysAbsenteeismTrend: last7DaysAbsenteeismTrend ?? this.last7DaysAbsenteeismTrend,
       catchError: catchError ?? this.catchError,
       connectionError: connectionError ?? this.connectionError,
       isAppNotInstalled: isAppNotInstalled ?? this.isAppNotInstalled,
+      permissionError: permissionError ?? this.permissionError,
 
     );
   }
@@ -196,6 +201,7 @@ class AttendanceDashboardState extends Equatable {
     earlyInIds,
     catchError,
     connectionError,
-    isAppNotInstalled
+    isAppNotInstalled,
+    permissionError,
   ];
 }

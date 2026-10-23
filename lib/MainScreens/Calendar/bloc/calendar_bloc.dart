@@ -93,6 +93,24 @@ class CalendarBloc extends Bloc<CalendarEvent, CalendarState> {
         ),
       );
     } catch (e) {
+      // The account is missing the Odoo HR access rights (e.g. a newly
+      // created user not yet assigned to the "Officer"/"User" role), so
+      // reading employee-linked data raises an AccessError. Surface this
+      // distinctly instead of the generic/module-not-installed states.
+      if (e.toString().contains('AccessError')) {
+        emit(
+          CalendarLoaded(
+            attendanceData: const [],
+            workSchedule: const {},
+            catchError: false,
+            connectionError: false,
+            isAppNotInstalled: false,
+            permissionError: true,
+          ),
+        );
+        return;
+      }
+
       // Check if the attendance/leave module is installed in Odoo
       bool success = await AppInstallCheck().checkLeaveModule();
       if (!success) {

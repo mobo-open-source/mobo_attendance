@@ -90,7 +90,12 @@ class PendingLeaveBloc extends Bloc<PendingLeaveEvent, PendingLeaveState> {
     Emitter<PendingLeaveState> emit,
   ) async {
     emit(state.copyWith(isLoading: true));
-    await _service.initializeClient();
+    try {
+      await _service.initializeClient();
+    } catch (e) {
+      emit(state.copyWith(isLoading: false));
+      return;
+    }
     add(const FetchPendingLeaves(page: 0));
   }
 
@@ -262,6 +267,7 @@ class PendingLeaveBloc extends Bloc<PendingLeaveEvent, PendingLeaveState> {
         errorMessage: errorMessage,
       ),
     );
+    emit(ShowRatingDialog());
 
     if (errorMessage == null) {
       add(const FetchPendingLeaves(page: 0));
@@ -288,6 +294,7 @@ class PendingLeaveBloc extends Bloc<PendingLeaveEvent, PendingLeaveState> {
         errorMessage: errorMessage,
       ),
     );
+    emit(ShowRatingDialog());
 
     if (errorMessage == null) {
       add(const FetchPendingLeaves(page: 0));
@@ -314,6 +321,7 @@ class PendingLeaveBloc extends Bloc<PendingLeaveEvent, PendingLeaveState> {
         errorMessage: errorMessage,
       ),
     );
+    emit(ShowRatingDialog());
 
     if (errorMessage == null) {
       add(const FetchPendingLeaves(page: 0));

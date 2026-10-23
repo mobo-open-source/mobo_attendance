@@ -376,7 +376,7 @@ class _CompanyDropdownContentState extends State<_CompanyDropdownContent> {
 
     return Container(
       width: widget.width ?? 280,
-      constraints: const BoxConstraints(maxHeight: 350),
+      constraints: const BoxConstraints(maxHeight: 480),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2D2D2D) : Colors.white,
         borderRadius: BorderRadius.circular(8),
@@ -426,7 +426,10 @@ class _CompanyDropdownContentState extends State<_CompanyDropdownContent> {
                 final isAllowed = _tempAllowedCompanyIds.contains(companyId);
 
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
                   child: Material(
                     color: isActive
                         ? (isDark
@@ -447,7 +450,7 @@ class _CompanyDropdownContentState extends State<_CompanyDropdownContent> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
-                          vertical: 8,
+                          vertical: 10,
                         ),
                         child: Row(
                           children: [
@@ -455,7 +458,7 @@ class _CompanyDropdownContentState extends State<_CompanyDropdownContent> {
                               child: Text(
                                 companyName,
                                 style: TextStyle(
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: isActive
                                       ? FontWeight.w600
                                       : FontWeight.normal,
@@ -467,8 +470,8 @@ class _CompanyDropdownContentState extends State<_CompanyDropdownContent> {
                             ),
                             const SizedBox(width: 12),
                             SizedBox(
-                              width: 20,
-                              height: 20,
+                              width: 28,
+                              height: 28,
                               child: MoboCheckbox(
                                 value: isAllowed,
                                 onChanged: _applying
@@ -488,7 +491,7 @@ class _CompanyDropdownContentState extends State<_CompanyDropdownContent> {
                                           }
                                         });
                                       },
-                                size: 18,
+                                size: 26,
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -507,37 +510,41 @@ class _CompanyDropdownContentState extends State<_CompanyDropdownContent> {
             child: Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed: _applying
-                        ? null
-                        : () {
-                            setState(() {
-                              _tempSelectedCompanyId =
-                                  widget.provider.selectedCompanyId ?? -1;
-                              _tempAllowedCompanyIds = widget
-                                  .provider
-                                  .selectedAllowedCompanyIds
-                                  .toSet();
-                            });
-                            Navigator.pop(context);
-                          },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: isDark ? Colors.white : Colors.black87,
-                      minimumSize: const Size(double.infinity, 36),
-                      padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    height: 48,
+                    child: OutlinedButton(
+                      onPressed: _applying
+                          ? null
+                          : () {
+                              setState(() {
+                                _tempSelectedCompanyId =
+                                    widget.provider.selectedCompanyId ?? -1;
+                                _tempAllowedCompanyIds = widget
+                                    .provider
+                                    .selectedAllowedCompanyIds
+                                    .toSet();
+                              });
+                              Navigator.pop(context);
+                            },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppStyle.primaryColor,
+                        minimumSize: const Size(double.infinity, 48),
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        side: BorderSide(
+                          color: AppStyle.primaryColor,
+                          width: 1.2,
+                        ),
                       ),
-                      side: BorderSide(
-                        color: isDark ? Colors.grey[600]! : Colors.grey[300]!,
-                      ),
-                    ),
-                    child: Text(
-                      'Reset',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark ? Colors.white : Colors.black,
-                        fontWeight: FontWeight.normal,
+                      child: Text(
+                        'Reset',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                          color: AppStyle.primaryColor,
+                        ),
                       ),
                     ),
                   ),
@@ -545,68 +552,73 @@ class _CompanyDropdownContentState extends State<_CompanyDropdownContent> {
 
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      final noActiveChange =
-                          _tempSelectedCompanyId ==
-                          widget.provider.selectedCompanyId;
-                      final noAllowedChange = _setEquals(
-                        _tempAllowedCompanyIds,
-                        widget.provider.selectedAllowedCompanyIds.toSet(),
-                      );
+                  child: SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        final noActiveChange =
+                            _tempSelectedCompanyId ==
+                            widget.provider.selectedCompanyId;
+                        final noAllowedChange = _setEquals(
+                          _tempAllowedCompanyIds,
+                          widget.provider.selectedAllowedCompanyIds.toSet(),
+                        );
 
-                      final disabled =
-                          _applying ||
-                          widget.provider.isSwitching ||
-                          (noActiveChange && noAllowedChange);
-                      if (!disabled) {
-                        _onConfirm();
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 36),
-                      backgroundColor: isDark
-                          ? Colors.white
-                          : AppStyle.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
+                        final disabled =
+                            _applying ||
+                            widget.provider.isSwitching ||
+                            (noActiveChange && noAllowedChange);
+                        if (!disabled) {
+                          _onConfirm();
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                        backgroundColor: isDark
+                            ? Colors.white
+                            : AppStyle.primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
-                    ),
-                    child: _applying
-                        ? Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    isDark ? Colors.black : Colors.white,
+                      child: _applying
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      isDark ? Colors.black : Colors.white,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'Applying...',
-                                style: TextStyle(
-                                  color: isDark ? Colors.black : Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
+                                SizedBox(width: 8),
+                                Text(
+                                  'Applying...',
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.black
+                                        : Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
+                              ],
+                            )
+                          : Text(
+                              'Confirm',
+                              style: TextStyle(
+                                color: isDark ? Colors.black : Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
                               ),
-                            ],
-                          )
-                        : Text(
-                            'Confirm',
-                            style: TextStyle(
-                              color: isDark ? Colors.black : Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
                             ),
-                          ),
+                    ),
                   ),
                 ),
               ],

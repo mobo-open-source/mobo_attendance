@@ -172,6 +172,73 @@ class ReportService {
     return domain;
   }
 
+  /// Odoo 20 removed the legacy `read_group(fields, groupby, orderby=...)`
+  /// contract; `formatted_read_group` replaces it.
+  Future<bool> _useFormattedReadGroup() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = '${prefs.getString('url')}|${prefs.getString('database')}';
+    final cached = _formattedSupport[key];
+    if (cached != null) return cached;
+    // Probe instead of trusting the stored version string: older servers
+    // don't have `formatted_read_group` at all.
+    bool supported;
+    try {
+      await CompanySessionManager.callKwWithCompany({
+        'model': 'hr.attendance',
+        'method': 'formatted_read_group',
+        'args': [
+          [],
+          ['employee_id'],
+          ['__count'],
+        ],
+        'kwargs': {'limit': 1},
+      });
+      supported = true;
+      _formattedSupport[key] = true;
+    } catch (_) {
+      // Not cached: a transient network error shouldn't pin the legacy path.
+      supported = false;
+    }
+    return supported;
+  }
+
+  static final Map<String, bool> _formattedSupport = {};
+
+  /// Converts a `formatted_read_group` row into the legacy `read_group` shape
+  /// the report chart expects (`employee_id: [id, name]`, `worked_hours_sum`,
+  /// `check_in:day: '2026-10-09'`, `__count`).
+  Map<String, dynamic> _legacyGroupRow(Map row) {
+    final out = <String, dynamic>{};
+    row.forEach((k, v) {
+      final key = k.toString();
+      if (key == '__extra_domain') return;
+      if (key == '__count') {
+        out[key] = v;
+      } else if ((key.startsWith('check_in:') || key.startsWith('check_out:')) &&
+          v is List) {
+        // Date group: [rawValue, label]
+        final unit = key.split(':')[1];
+        if (const {'day', 'month', 'year'}.contains(unit) && v.isNotEmpty) {
+          final raw = v[0].toString();
+          final date = raw.split(' ').first;
+          out[key] = unit == 'day'
+              ? date
+              : unit == 'month'
+              ? date.substring(0, 7)
+              : date.substring(0, 4);
+        } else {
+          out[key] = v.length > 1 ? v[1] : v.first;
+        }
+      } else if (key.contains(':')) {
+        // Aggregate e.g. worked_hours:sum -> worked_hours_sum
+        out[key.replaceFirst(':', '_')] = v;
+      } else {
+        out[key] = v;
+      }
+    });
+    return out;
+  }
+
   /// Counts total attendance records matching current filters and search text.
   ///
   /// Uses `read_group` on `employee_id` to get unique count (fast).
@@ -185,6 +252,20 @@ class ReportService {
       filters,
       searchText: searchText,
     );
+
+    if (await _useFormattedReadGroup()) {
+      final result = await CompanySessionManager.callKwWithCompany({
+        'model': 'hr.attendance',
+        'method': 'formatted_read_group',
+        'args': [
+          domain,
+          ['employee_id'],
+          ['__count'],
+        ],
+        'kwargs': {},
+      });
+      return (result as List).length;
+    }
 
     final result = await CompanySessionManager.callKwWithCompany({
       'model': 'hr.attendance',
@@ -300,6 +381,26 @@ class ReportService {
       'check_in:min',
       'check_out:max',
     ];
+    if (await _useFormattedReadGroup()) {
+      final result = await CompanySessionManager.callKwWithCompany({
+        'model': 'hr.attendance',
+        'method': 'formatted_read_group',
+        'args': [
+          domain,
+          groupByList,
+          [...fields, '__count'],
+        ],
+        'kwargs': {
+          'order': dateGroupBy != null ? groupByList.first : 'employee_id',
+          'limit': itemsPerPage,
+          'offset': offset,
+        },
+      });
+      return (result as List? ?? [])
+          .map((r) => _legacyGroupRow(Map<String, dynamic>.from(r as Map)))
+          .toList();
+    }
+
     final result = await CompanySessionManager.callKwWithCompany({
       'model': 'hr.attendance',
       'method': 'read_group',

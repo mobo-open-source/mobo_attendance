@@ -364,6 +364,12 @@ class PrivateInfoBloc extends Bloc<PrivateInfoEvent, PrivateInfoState> {
         safeDate(state.workPermitExpireController.text),
       };
 
+      if (majorVersion >= 20) {
+        data.remove('private_car_plate');
+        data.remove('ssnid');
+        data.remove('study_school');
+      }
+
       // Version-aware field names
       if (majorVersion >= 18) {
         data['primary_bank_account_id'] = state.selectedPrivateBankId;

@@ -11,11 +11,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../../CommonWidgets/core/company/infrastructure/company_refresh_bus.dart';
 import '../../../CommonWidgets/core/company/providers/company_provider.dart';
-import '../../../CommonWidgets/core/company/session/company_session_manager.dart';
 import '../../../CommonWidgets/core/language/translate_widget.dart';
 import '../../../CommonWidgets/core/providers/language_provider.dart';
 import '../../../CommonWidgets/globals.dart';
@@ -77,56 +75,11 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
   Map<String, dynamic>? selectedCountry;
   bool isLoading = true;
   bool isSaving = false;
-  bool isAdmin = false;
 
   @override
   void initState() {
     super.initState();
-    canManageSkills();
     loadProfile();
-  }
-
-  int parseMajorVersion(String serverVersion) {
-    final match = RegExp(r'\d+').firstMatch(serverVersion);
-    if (match != null) {
-      return int.tryParse(match.group(0)!) ?? 0;
-    }
-    return 0;
-  }
-
-  /// Determines whether the current user has admin rights (base.group_system)
-  /// Used to show/hide the Edit / Save / Cancel buttons.
-  Future<void> canManageSkills() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String version = prefs.getString('serverVersion') ?? '0';
-    final int userId = prefs.getInt('userId') ?? 0;
-    final int majorVersion = parseMajorVersion(version);
-
-    Future<bool> hasGroup(String groupExtId) async {
-      if (majorVersion >= 18) {
-        return await CompanySessionManager.callKwWithCompany({
-              'model': 'res.users',
-              'method': 'has_group',
-              'args': [userId, groupExtId],
-              'kwargs': {},
-            }) ==
-            true;
-      } else {
-        return await CompanySessionManager.callKwWithCompany({
-              'model': 'res.users',
-              'method': 'has_group',
-              'args': [groupExtId],
-              'kwargs': {},
-            }) ==
-            true;
-      }
-    }
-
-    final admin = await hasGroup('base.group_system');
-
-    setState(() {
-      isAdmin = admin;
-    });
   }
 
   /// Loads the current user's profile data + countries + states lists.
@@ -195,46 +148,82 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
         isEdited = true;
       });
       await profileService.updateUserProfile({'image_1920': base64String});
+      // Refresh app bar + the saved-account avatar used in Switch Accounts
+      ProfileRefreshBus.notifyProfileRefresh();
     }
   }
 
-  /// Saves the main editable profile fields (name, email, phone, mobile, image).
-  /// Handles version-specific field names (mobile vs mobile_phone).
+  /// Saves the main editable profile fields (name, email, phone, image) and
+  /// the mobile number as two independent writes, so a failure in one never
+  /// blocks the other (see [ProfileService.updateMobileNumber]).
   Future<void> _saveProfile() async {
     setState(() {
       isSaving = true;
     });
-    final prefs = await SharedPreferences.getInstance();
-    int version = prefs.getInt('version') ?? 0;
 
     final profileService = ProfileService();
     await profileService.initializeClient();
+    // `contact_address` is deliberately excluded: it's a read-only display
+    // field, not writable on res.users, and address is edited separately
+    // via `_showEditPopup()` -> `updateUserAddress()`. Odoo also only
+    // allows a non-admin user to write their own res.users record when
+    // every field in the call is on its internal self-write whitelist; one
+    // non-writable field (like `contact_address`) would silently block
+    // name/email/phone/image from saving too.
     final updateData = {
       'name': _nameController.text.trim(),
       'email': _emailController.text.trim(),
       'phone': _phoneController.text.trim(),
-      'contact_address': _addressController.text.trim(),
       'image_1920': base64Image ?? _pickedImageFile ?? "",
-      if (version < 18) 'mobile': _mobileController.text.trim(),
-      if (version >= 18) 'mobile_phone': _mobileController.text.trim(),
     };
 
-    final response = await profileService.updateUserProfile(updateData);
+    final profileResponse = await profileService.updateUserProfile(updateData);
+    final mobileResponse = await profileService.updateMobileNumber(
+      _mobileController.text.trim(),
+    );
+
+    // Re-fetch from the server rather than trusting the just-typed values:
+    // a field can report success without actually persisting (e.g. a
+    // company-context mismatch silently no-ops a related-field write), so
+    // the form should reflect what's really stored, not what was submitted.
+    final refreshedProfiles = await profileService.loadProfile();
+    if (!mounted) return;
+    if (refreshedProfiles.isNotEmpty) {
+      final profile = refreshedProfiles.first;
+      profiles = refreshedProfiles;
+      _nameController.text = profile.name;
+      _emailController.text = profile.mail;
+      _phoneController.text = profile.phone;
+      _mobileController.text = profile.mobile;
+    }
 
     setState(() {
       isEdited = false;
       isSaving = false;
     });
+    ProfileRefreshBus.notifyProfileRefresh();
 
-    if (response['success'] == true) {
+    final profileSaved = profileResponse['success'] == true;
+    final mobileSaved = mobileResponse['success'] == true;
+
+    if (profileSaved && mobileSaved) {
       CustomSnackbar.showSuccess(context, 'Profile saved successfully');
-    } else if (response['error'] != null) {
+    } else if (!profileSaved && !mobileSaved) {
       CustomSnackbar.showError(
         context,
         'You do not have permission to update profile. Please contact your administrator.',
       );
+    } else if (!mobileSaved) {
+      CustomSnackbar.showError(
+        context,
+        'Profile saved, but mobile number could not be updated.'
+        ' ${mobileResponse['error'] ?? ''}',
+      );
     } else {
-      CustomSnackbar.showError(context, 'Failed to save profile');
+      CustomSnackbar.showError(
+        context,
+        'Mobile number saved, but the rest of the profile could not be updated.',
+      );
     }
   }
 
@@ -289,52 +278,50 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
             },
           ),
           actions: [
-            if (isAdmin) ...[
-              if (!catchError) ...[
-                if (isEdited == false)
-                  TextButton(
-                    onPressed: () {
-                      setState(() => isEdited = true);
-                    },
-                    child: tr(
-                      "Edit",
-                      style: TextStyle(
-                        color: theme.colorScheme.onBackground,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 17,
+            if (!catchError) ...[
+              if (isEdited == false)
+                TextButton(
+                  onPressed: () {
+                    setState(() => isEdited = true);
+                  },
+                  child: tr(
+                    "Edit",
+                    style: TextStyle(
+                      color: theme.colorScheme.onBackground,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 17,
+                    ),
+                  ),
+                )
+              else ...[
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        setState(() => isEdited = false);
+                      },
+                      child: tr(
+                        "cancel",
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          fontWeight: FontWeight.w500,
+                          fontSize: 17,
+                        ),
                       ),
                     ),
-                  )
-                else ...[
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          setState(() => isEdited = false);
-                        },
-                        child: tr(
-                          "cancel",
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
-                            fontWeight: FontWeight.w500,
-                            fontSize: 17,
-                          ),
+                    TextButton(
+                      onPressed: isEdited ? _saveProfile : null,
+                      child: tr(
+                        "Save",
+                        style: TextStyle(
+                          color: theme.colorScheme.onBackground,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 17,
                         ),
                       ),
-                      TextButton(
-                        onPressed: isEdited ? _saveProfile : null,
-                        child: tr(
-                          "Save",
-                          style: TextStyle(
-                            color: theme.colorScheme.onBackground,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 17,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ],
             ],
           ],
@@ -450,7 +437,7 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
                                 children: [
                                   CircleAvatar(
                                     radius: 50,
-                                    backgroundColor: Colors.transparent,
+                                    backgroundColor: AppStyle.primaryColor,
                                     child: ClipOval(
                                       child: SizedBox(
                                         width: 100,
@@ -470,16 +457,21 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
                                                       profileImageBytes!,
                                                       fit: BoxFit.cover,
                                                       errorBuilder:
-                                                          (_, __, ___) =>
-                                                              const Icon(
-                                                                Icons.person,
-                                                                size: 50,
-                                                              ),
+                                                          (
+                                                            _,
+                                                            __,
+                                                            ___,
+                                                          ) => const Icon(
+                                                            HugeIcons
+                                                                .strokeRoundedUser,
+                                                            size: 50,
+                                                            color: Colors.white,
+                                                          ),
                                                     )
                                             : const Icon(
-                                                Icons.person,
+                                                HugeIcons.strokeRoundedUser,
                                                 size: 50,
-                                                color: Colors.pink,
+                                                color: Colors.white,
                                               ),
                                       ),
                                     ),
